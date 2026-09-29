@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { before, after, beforeEach, test } from 'node:test';
 import { hexlify, randomBytes } from 'ethers';
 import { createEnvironment, createRecipient, prepareDeposit, fund, settle,
-  decryptDeposit } from '../scripts/harness.mjs';
+  decryptDeposit } from '../scripts/harness.ts';
+import type { DepositArguments, Environment } from '../scripts/types.ts';
 
-let env;
-let snapshot;
+let env: Environment;
+let snapshot: string;
 before(async () => { env = await createEnvironment(); snapshot = await env.provider.send('evm_snapshot', []); });
 after(async () => { if (env) await env.close(); });
 beforeEach(async () => {
@@ -36,14 +37,15 @@ test('ordinary transfer to an undeployed address becomes a recipient-decryptable
 test('changing recipient data, ciphertext, token or recovery owner changes the address', async () => {
   const deposit = await prepareDeposit(env, (await createRecipient()).address);
   await fund(env, deposit.address, 100_000_000n);
-  const mutations = [
-    [1, await env.attacker.getAddress()],
-    [2, hexlify(randomBytes(32))],
-    [3, { ...deposit.args[3], shieldKey: hexlify(randomBytes(32)) }],
-    [4, await env.attacker.getAddress()],
+  const [salt, token, npk, ciphertext, recovery] = deposit.args;
+  const attacker = await env.attacker.getAddress();
+  const mutations: DepositArguments[] = [
+    [salt, attacker, npk, ciphertext, recovery],
+    [salt, token, hexlify(randomBytes(32)), ciphertext, recovery],
+    [salt, token, npk, { ...ciphertext, shieldKey: hexlify(randomBytes(32)) }, recovery],
+    [salt, token, npk, ciphertext, attacker],
   ];
-  for (const [index, value] of mutations) {
-    const changed = [...deposit.args]; changed[index] = value;
+  for (const changed of mutations) {
     assert.notEqual(await env.factory.computeAddress(...changed), deposit.address);
     await assert.rejects(env.factory.connect(env.attacker).deployAndShield.staticCall(...changed));
   }
@@ -56,6 +58,7 @@ test('a stranger can front-run deployment and settlement but funds still reach t
   await fund(env, deposit.address, 50_000_000n);
   await (await env.factory.connect(env.attacker).deploy(...deposit.args)).wait();
   const receipt = await (await env.forwarderAt(deposit.address, env.attacker).shield()).wait();
+  assert(receipt, 'Shielding transaction must be mined');
   assert.equal((await decryptDeposit(env, recipient, receipt)).amount, 49_875_000n);
   assert.equal(await env.token.balanceOf(await env.attacker.getAddress()), 0n);
 });

@@ -25,7 +25,7 @@ spending and recovery keys; the demo uses local test accounts.
 
 ## Run
 
-Requires Node.js 24, Git, and [Anvil](https://getfoundry.sh/) (tested with 1.7.1).
+Requires Node.js 24.12+, Git, and [Anvil](https://getfoundry.sh/) (tested with 1.7.1).
 
 ```sh
 git clone https://github.com/blmalone/jumpr.git
@@ -33,6 +33,7 @@ cd jumpr
 npm ci --ignore-scripts
 npm run setup
 npm run demo
+npm run typecheck
 npm test
 ```
 

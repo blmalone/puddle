@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseEther } from 'ethers';
 import { FORK, createEnvironment, createRecipient, prepareDeposit, fund, settle,
-  decryptDeposit } from '../scripts/harness.mjs';
+  decryptDeposit } from '../scripts/harness.ts';
 
 test('CREATE2 forwarding deposits real WETH into deployed RAILGUN on an Arbitrum fork', async () => {
   const fork = { ...FORK, rpc: process.env.ARBITRUM_RPC_URL || FORK.rpc,

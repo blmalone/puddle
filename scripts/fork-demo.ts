@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { formatEther, parseEther, keccak256 } from 'ethers';
 import { FORK, createEnvironment, createRecipient, prepareDeposit, fund, settle,
-  decryptDeposit, saveReport } from './harness.mjs';
+  decryptDeposit, saveReport } from './harness.ts';
 
 const fork = { ...FORK, rpc: process.env.ARBITRUM_RPC_URL || FORK.rpc,
   block: Number(process.env.FORK_BLOCK || FORK.block) };
@@ -21,6 +21,7 @@ try {
   assert.equal(await env.provider.getCode(deposit.address), '0x');
   console.log('Wrapped fork-only ETH into real WETH, then sent 0.1 WETH to the undeployed address.');
   const receipt = await settle(env, deposit);
+  assert(env.depositPath, 'Settlement must capture the deposit path');
   const note = await decryptDeposit(env, recipient, receipt);
   assert.equal(await env.token.balanceOf(await env.pool.getAddress()) - poolBefore, note.amount);
   assert.equal(await env.token.balanceOf(deposit.address), 0n);

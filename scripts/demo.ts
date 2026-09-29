@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { formatUnits } from 'ethers';
 import { createEnvironment, createRecipient, prepareDeposit, fund, settle,
-  decryptDeposit, saveReport } from './harness.mjs';
+  decryptDeposit, saveReport } from './harness.ts';
 
 console.log('Starting a private local Anvil chain and deploying real RAILGUN contracts…');
 const env = await createEnvironment();

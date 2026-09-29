@@ -10,13 +10,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "setup": "node scripts/setup.mjs",
-    "test": "node --test --test-concurrency=1 test/deposit.test.mjs",
-    "test:fork": "node --test test/fork.test.mjs",
-    "demo": "node scripts/demo.mjs",
-    "demo:fork": "node scripts/fork-demo.mjs"
+    "setup": "node scripts/setup.ts",
+    "test": "node --test --test-concurrency=1 test/deposit.test.ts",
+    "test:fork": "node --test test/fork.test.ts",
+    "demo": "node scripts/demo.ts",
+    "demo:fork": "node scripts/fork-demo.ts",
+    "typecheck": "tsc --noEmit"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=24.12.0"
+  },
   "dependencies": {
     "@openzeppelin/contracts": "4.8.3",
     "@openzeppelin/contracts-upgradeable": "4.8.3",
@@ -24,5 +27,9 @@
     "circomlibjs": "0.1.7",
     "ethers": "6.14.3",
     "solc": "0.8.17"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "typescript": "7.0.2"
   }
 }

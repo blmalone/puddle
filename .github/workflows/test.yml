@@ -31,6 +31,7 @@ jobs:
           version: v1.7.1
           cache: false
       - run: npm ci --ignore-scripts
+      - run: npm run typecheck
       - run: npm run setup
       - run: npm test
       - name: Arbitrum fork test

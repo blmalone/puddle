@@ -1,0 +1,28 @@
+{
+  "name": "jumpr",
+  "version": "0.0.0",
+  "description": "A CREATE2-to-RAILGUN deposit proof of concept.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blmalone/jumpr.git"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "test": "node --test --test-concurrency=1 test/deposit.test.mjs",
+    "test:fork": "node --test test/fork.test.mjs",
+    "demo": "node scripts/demo.mjs",
+    "demo:fork": "node scripts/fork-demo.mjs"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@openzeppelin/contracts": "4.8.3",
+    "@openzeppelin/contracts-upgradeable": "4.8.3",
+    "@railgun-community/engine": "9.8.0",
+    "circomlibjs": "0.1.7",
+    "ethers": "6.14.3",
+    "solc": "0.8.17"
+  }
+}

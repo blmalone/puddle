@@ -1,11 +1,11 @@
 {
-  "name": "tobar",
+  "name": "puddle",
   "version": "0.0.0",
   "description": "A CREATE2-to-RAILGUN deposit proof of concept.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/blmalone/tobar.git"
+    "url": "https://github.com/blmalone/puddle.git"
   },
   "private": true,
   "type": "module",

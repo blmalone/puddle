@@ -25,7 +25,6 @@
     "test": "node --test --test-concurrency=1 test/deposit.test.ts",
     "test:fork": "node --test test/fork.test.ts",
     "demo": "node scripts/demo.ts",
-    "demo:fork": "node scripts/fork-demo.ts",
     "typecheck": "tsc --noEmit"
   },
   "engines": {

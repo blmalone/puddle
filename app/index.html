@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>{{brand.name}} — fund your private wallet</title>
+  <script src="/theme.js"></script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10'/%3E%3Cpath d='M11 28h9V12m-6 6 6-6 6 6' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/main.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <a class="brand" href="/" aria-label="{{brand.name}} home">{{brand.name}}</a>
+      <details class="site-menu" id="site-menu">
+        <summary id="menu-toggle" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 4h14M3 10h14M3 16h14"/></svg></summary>
+        <nav aria-label="Resources">
+          <a href="http://127.0.0.1:5174" target="_blank" rel="noreferrer">Docs<span aria-hidden="true">↗</span></a>
+          <a href="http://127.0.0.1:5175" target="_blank" rel="noreferrer">Recovery<span aria-hidden="true">↗</span></a>
+          <div class="theme-row">
+            <span id="menu-theme-label">Theme</span>
+            <div class="theme-picker" role="group" aria-labelledby="menu-theme-label">
+              <button data-theme-choice="light" type="button" aria-label="Light mode" aria-pressed="true" title="Light mode"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button>
+              <button data-theme-choice="dark" type="button" aria-label="Dark mode" aria-pressed="false" title="Dark mode"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.9 13.1A8.7 8.7 0 0 1 10.9 3a9 9 0 1 0 10 10.1Z"/></svg></button>
+            </div>
+          </div>
+        </nav>
+      </details>
+    </header>
+    <main aria-label="Local deposit test">
+      <section id="intro" class="intro">
+        <h1>Send normally.<br>Receive <em>privately.</em></h1>
+        <p class="description">
+          Send to your <span class="railgun-logo" role="img" aria-label="RAILGUN"></span> private balance
+          <span class="logo-phrase">from any crypto wallet <span class="logo-stack wallets" role="img" aria-label="MetaMask, Rainbow, Rabby and more wallets"><span><img src="/assets/metamask.svg" width="18" height="18" alt=""></span><span><img src="/assets/rainbow.svg" width="18" height="18" alt=""></span><span><img src="/assets/rabby.svg" width="18" height="18" alt=""></span><span class="logo-more" aria-hidden="true">+</span></span></span>
+          <span class="logo-phrase" title="Planned cross-chain support. The current demo runs on a local chain.">from any chain <span class="logo-stack networks" role="img" aria-label="Planned networks: Ethereum, Base, Arbitrum, BNB Chain, Optimism, Robinhood Chain and more"><span><img src="/assets/chains/eth.png" width="18" height="18" alt=""></span><span><img src="/assets/chains/base.png" width="18" height="18" alt=""></span><span><img src="/assets/chains/arbitrum.png" width="18" height="18" alt=""></span><span><img src="/assets/chains/bnb.png" width="18" height="18" alt=""></span><span><img src="/assets/chains/optimism.png" width="18" height="18" alt=""></span><span><img src="/assets/chains/robinhood.png" width="18" height="18" alt=""></span><span class="logo-more" aria-hidden="true">+</span></span></span>
+        </p>
+        <ul class="benefits">
+          <li><span aria-hidden="true">✓</span>One transfer</li>
+          <li><span aria-hidden="true">✓</span>No manual shielding</li>
+          <li><span aria-hidden="true">✓</span>Fully self-custodial</li>
+        </ul>
+      </section>
+      <section class="workspace" aria-label="Deposit">
+      <div class="demo-card">
+      <span id="card-label" class="sr-only">New deposit</span>
+      <div class="notice" id="error" role="alert" hidden></div>
+      <div id="loading" class="loading"><span class="spinner" aria-hidden="true"></span>Preparing test wallet…</div>
+
+      <form id="deposit-form" hidden novalidate>
+        <div class="amount-box">
+          <label class="field-label" for="amount">You send</label>
+          <div class="amount-field"><input id="amount" name="amount" value="100" inputmode="decimal" autocomplete="off" aria-describedby="amount-hint" required><span class="token-symbol" title="Demo USDC — local test token">USDC</span></div>
+          <span class="field-hint" id="amount-hint" hidden></span>
+        </div>
+        <div class="recipient-row">
+          <label class="field-label" for="recipient">To</label>
+          <div class="recipient-field">
+            <output id="recipient" aria-label="Private recipient address"></output>
+            <button type="button" class="copy-icon" id="copy-recipient" aria-label="Copy private recipient address"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button>
+          </div>
+        </div>
+        <details class="fees">
+          <summary><span>Fees <span class="disclosure" aria-hidden="true">+</span></span><span id="total-fee">—</span></summary>
+          <div><span>{{brand.displayName}} · 0.1%</span><span id="service-fee">—</span></div>
+          <div><span>Gas</span><span id="gas-fee">—</span></div>
+          <div><span>RAILGUN · 0.25%</span><span id="protocol-fee">—</span></div>
+        </details>
+        <div class="total"><span>You receive</span><strong id="receive-amount">—</strong></div>
+        <button class="primary" id="create" type="submit">Create address</button>
+      </form>
+
+      <section id="deposit-panel" hidden aria-labelledby="deposit-title">
+        <div id="status-icon" class="status-icon" aria-hidden="true">↘</div>
+        <h2 id="deposit-title">Your address is ready.</h2>
+        <p class="description" id="deposit-description">Send your test tokens here.</p>
+        <div id="received-block" hidden><div class="received-amount"><span id="received-value"></span><span class="received-unit">USDC</span></div><span class="verified-label">✓ Receipt decrypted and verified</span></div>
+        <div id="deposit-address-block"><span class="field-label">Deposit address</span><div class="deposit-address"><code id="deposit-address"></code><button type="button" class="copy-icon" id="copy-deposit" aria-label="Copy deposit address">⧉</button></div></div>
+        <div class="progress-status" id="progress-status" role="status" aria-live="polite"></div>
+        <button class="secondary" id="save-recovery" type="button">Save recovery file</button>
+        <p class="button-note" id="recovery-note">Save this before sending. Keep it private.</p>
+        <button class="primary" id="fund" type="button"><span id="fund-label">Send test tokens</span></button>
+        <button class="primary" id="retry" type="button" hidden>Retry shielding</button>
+        <button class="secondary" id="recover" type="button" hidden>Recover test tokens</button>
+        <button class="primary" id="new-deposit" type="button" hidden>New deposit</button>
+        <p class="button-note" id="fund-note">Local test tokens. No real funds.</p>
+        <details class="receipt-details" id="receipt-details" hidden><summary>Transaction details<span class="disclosure" aria-hidden="true">+</span></summary><dl id="receipt-rows"></dl></details>
+      </section>
+      </div>
+      <div class="trust"><a href="{{brand.repository}}" target="_blank" rel="noreferrer">Open source ↗</a><span>Non-custodial</span><span class="audit" title="Planned for release; the current contracts have not been audited.">Audited</span></div>
+      </section>
+    </main>
+  </div>
+  <div class="appearance theme-picker" role="group" aria-label="Appearance">
+    <button data-theme-choice="light" type="button" aria-label="Light mode" aria-pressed="true" title="Light mode"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button>
+    <button data-theme-choice="dark" type="button" aria-label="Dark mode" aria-pressed="false" title="Dark mode"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.9 13.1A8.7 8.7 0 0 1 10.9 3a9 9 0 1 0 10 10.1Z"/></svg></button>
+  </div>
+  <div class="toast" id="toast" role="status" hidden>Copied</div>
+  <!-- build-version -->
+</body>
+</html>

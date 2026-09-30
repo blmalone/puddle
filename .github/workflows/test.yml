@@ -26,14 +26,22 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            docs/package-lock.json
       - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
         with:
           version: v1.7.1
           cache: false
       - run: npm ci --ignore-scripts
+      - run: npm ci --prefix docs --ignore-scripts
       - run: npm run typecheck
+      - run: npm run docs:typecheck
+      - run: npm run docs:build
       - run: npm run setup
       - run: npm test
+      - run: npm run test:ui
+      - run: npm run test:recovery
       - name: Arbitrum fork test
         if: github.event_name == 'workflow_dispatch' && inputs.fork
         run: npm run test:fork

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fafaf9">
+  <meta name="referrer" content="no-referrer">
+  <!-- content-security-policy -->
+  <title>{{brand.name}} — recovery</title>
+  <script src="./theme.js"></script>
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">{"imports":{"ethers":"./vendor/ethers.js"}}</script>
+  <script type="module" src="./main.js"></script>
+</head>
+<body>
+  <header><a class="brand" href="./">{{brand.name}}<span> / recovery</span></a><a href="{{brand.repository}}/tree/main/recovery" target="_blank" rel="noreferrer">Source ↗</a></header>
+  <main>
+    <h1>Your funds.<br><em>Your way back.</em></h1>
+    <p class="intro">Recover an unshielded deposit to your wallet.<br>No {{brand.displayName}} account or relayer needed.</p>
+    <fieldset id="controls" disabled>
+      <legend class="sr-only">Recovery</legend>
+      <section class="card">
+        <label for="file">Recovery file</label>
+        <input id="file" type="file" accept=".json,application/json" aria-describedby="file-help">
+        <p class="hint" id="file-help">Read on this device. Never uploaded.</p>
+        <details><summary>Or paste the file contents</summary><label class="sr-only" for="paste">Recovery JSON</label><textarea id="paste" spellcheck="false" autocomplete="off" maxlength="16384" placeholder="Paste recovery JSON"></textarea><button type="button" class="secondary" id="load-paste">Load file contents</button></details>
+        <div id="review" hidden>
+          <dl>
+            <div><dt>Chain ID</dt><dd id="chain"></dd></div>
+            <div><dt>Deposit</dt><dd id="deposit"></dd></div>
+            <div><dt>Returns to</dt><dd id="owner"></dd></div>
+            <div><dt>Factory</dt><dd id="factory"></dd></div>
+          </dl>
+          <p class="hint">Check these addresses against your original deposit. Your connected wallet must match “Returns to”.</p>
+          <label for="asset-kind">Recover</label>
+          <select id="asset-kind"><option value="token">Token</option><option value="native">Native currency</option></select>
+          <div id="token-field"><label class="sr-only" for="asset-address">Token contract address</label><input id="asset-address" type="text" spellcheck="false" autocomplete="off" placeholder="Token contract address"></div>
+          <div class="balance"><span>Available</span><strong id="balance">—</strong></div>
+          <button id="check" type="button" class="secondary">Connect wallet &amp; check</button>
+          <button id="submit" type="button" hidden>Recover to your wallet</button>
+          <p class="hint">You pay network gas. No service fee.</p>
+        </div>
+      </section>
+    </fieldset>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p id="transaction-row" class="hint" hidden>Latest transaction <code id="transaction"></code></p>
+    <p class="footnote">Already shielded? Your funds stay in your RAILGUN wallet.<br>Recovery is public. Current contracts are unaudited.</p>
+  </main>
+  <footer><div class="theme-picker" role="group" aria-label="Theme"><button data-theme-choice="light" type="button" aria-pressed="true">Light</button><button data-theme-choice="dark" type="button" aria-pressed="false">Dark</button></div><!-- build-version --></footer>
+</body>
+</html>

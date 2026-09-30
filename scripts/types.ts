@@ -19,27 +19,46 @@ export interface TokenContract extends BaseContract {
   transfer: Write<[recipient: string, amount: bigint], boolean>;
 }
 
-export type DepositArguments = [
-  salt: string, token: string, notePublicKey: BytesLike,
-  ciphertext: ShieldCiphertextStruct, recovery: string,
-];
+export interface DepositConfig {
+  token: string;
+  notePublicKey: BytesLike;
+  ciphertext: ShieldCiphertextStruct;
+  recovery: string;
+  relayer: string;
+  feeRecipient: string;
+  minDeposit: bigint;
+  maxGasFee: bigint;
+}
+
+export type DepositArguments = [salt: string, config: DepositConfig];
 
 export interface DepositFactory extends BaseContract {
   connect(runner: ContractRunner | null): DepositFactory;
   computeAddress: Read<DepositArguments, string>;
   deploy: Write<DepositArguments, string>;
-  deployAndShield: Write<DepositArguments, string>;
+  deployAndShield: Write<[...DepositArguments, gasFee: bigint], string>;
 }
 
 export interface DepositForwarder extends BaseContract {
   connect(runner: ContractRunner | null): DepositForwarder;
-  shield: Write<[]>;
+  shield: Write<[gasFee: bigint]>;
+  preview: Read<[amount: bigint, gasFee: bigint], [serviceFee: bigint, shieldAmount: bigint]>;
+  spent: Read<[], boolean>;
+  maxGasFee: Read<[], bigint>;
+  minDeposit: Read<[], bigint>;
+  relayer: Read<[], string>;
+  feeRecipient: Read<[], string>;
   recover: Write<[token: string]>;
+  recoverNative: Write<[]>;
 }
 
 export interface ContractArtifact {
   abi: JsonFragment[];
   evm: {
+    deployedBytecode: {
+      object: string;
+      immutableReferences: Record<string, { start: number; length: number }[]>;
+    };
     bytecode: {
       object: string;
       linkReferences: Record<string, Record<string, { start: number; length: number }[]>>;
@@ -82,6 +101,7 @@ export interface Environment {
   recovery: JsonRpcSigner;
   attacker: JsonRpcSigner;
   treasury: JsonRpcSigner;
+  feeCollector: JsonRpcSigner;
   forwarderAt(address: string, signer?: JsonRpcSigner): DepositForwarder;
   depositPath?: DepositPath;
 }

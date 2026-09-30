@@ -1,0 +1,7 @@
+:root {
+  --vocs-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --vocs-font-family-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --vocs-background-color-primary: light-dark(#fff, #111113);
+  --vocs-background-color-surface: light-dark(#fff, #19191c);
+  --vocs-text-color-primary: light-dark(#171717, #eeeef0);
+}

@@ -1,5 +1,9 @@
 node_modules/
 .cache/
+docs/.vocs/
+docs/.waku/
+docs/dist/
+docs/src/pages.gen.ts
 artifacts/
 .env
 .env.*

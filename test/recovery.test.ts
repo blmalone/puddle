@@ -1,0 +1,160 @@
+import assert from 'node:assert/strict';
+import { before, after, test } from 'node:test';
+import { readFile, writeFile } from 'node:fs/promises';
+import { ContractFactory, ZeroAddress, parseEther } from 'ethers';
+import { compile, createEnvironment, createRecipient, fund, prepareDeposit, settle } from '../scripts/harness.ts';
+import type { Environment, PreparedDeposit } from '../scripts/types.ts';
+import { createRecoveryFile, recoveryArtifacts } from '../scripts/recovery-file.ts';
+import { startRecoverySite } from '../scripts/serve-recovery.ts';
+import { checkRecoveryAddress, inspectRecovery, parseRecoveryFile, predictRecoveryAddress,
+  recoveryTransaction } from '../recovery/core.ts';
+import type { RecoveryArtifacts, RecoveryFile } from '../recovery/core.ts';
+
+let env: Environment;
+let artifacts: RecoveryArtifacts;
+let recipient: string;
+let owner: string;
+before(async () => {
+  const contracts = compile();
+  artifacts = recoveryArtifacts(contracts);
+  env = await createEnvironment(contracts);
+  recipient = (await createRecipient()).address;
+  owner = await env.recovery.getAddress();
+});
+after(async () => { if (env) await env.close(); });
+
+async function prepare(): Promise<{ file: RecoveryFile; deposit: PreparedDeposit }> {
+  const deposit = await prepareDeposit(env, recipient, { minDeposit: 1_000_000n, maxGasFee: 100_000n });
+  const file = createRecoveryFile(31337n, await env.factory.getAddress(), await env.pool.getAddress(), deposit);
+  return { file, deposit };
+}
+
+test('backup round-trips, predicts the exact address, and matches the independent site build', async () => {
+  const { file, deposit } = await prepare();
+  const saved = JSON.stringify(file);
+  assert.deepEqual(parseRecoveryFile(saved), file);
+  assert.equal(predictRecoveryAddress(file, artifacts), deposit.address);
+  assert.doesNotMatch(saved, /"(?:privateKey|mnemonic|viewing|recipient|rpc|transactions)":/i);
+  assert.deepEqual(JSON.parse(await readFile(new URL('../.cache/recovery/contracts.json', import.meta.url), 'utf8')), artifacts);
+  await writeFile(new URL('../.cache/recovery-example.json', import.meta.url), saved);
+});
+
+test('rejects malformed, oversized, unsupported and executable file content', async () => {
+  const { file } = await prepare();
+  for (const invalid of [null, [], {}, { ...file, version: 2 }, { ...file, chainId: 31337 },
+    { ...file, chainId: '0' }, { ...file, transactions: [{ to: owner }] },
+    { ...file, config: { ...file.config, minDeposit: '-1' } },
+    { ...file, config: { ...file.config, maxGasFee: file.config.minDeposit } },
+    { ...file, config: { ...file.config, recovery: ZeroAddress } },
+    { ...file, config: { ...file.config, ciphertext: { encryptedBundle: [], shieldKey: file.salt } } },
+    { ...file, pool: '<script>alert(1)</script>' },
+  ]) assert.throws(() => parseRecoveryFile(JSON.stringify(invalid)));
+  assert.throws(() => parseRecoveryFile('{'));
+  assert.throws(() => parseRecoveryFile(' '.repeat(16_385)), /too large/);
+});
+
+test('rejects changed deposit settings and refuses wrong wallet or chain before submitting', async () => {
+  const { file } = await prepare();
+  const attacker = await env.attacker.getAddress();
+  const alternatives = [
+    { ...file, salt: `0x${'ab'.repeat(32)}` }, { ...file, depositAddress: attacker },
+    ...['recovery', 'relayer', 'feeRecipient', 'token'].map(key => ({ ...file, config: { ...file.config, [key]: attacker } })),
+    { ...file, config: { ...file.config, minDeposit: '2000000' } },
+    { ...file, config: { ...file.config, notePublicKey: `0x${'cd'.repeat(32)}` } },
+  ];
+  for (const changed of alternatives) assert.throws(() => checkRecoveryAddress(changed, artifacts), /does not match/);
+  await assert.rejects(recoveryTransaction(env.provider, file, artifacts, attacker, file.config.token, 'deploy'), /Connect the recovery wallet/);
+  await assert.rejects(inspectRecovery(env.provider, { ...file, chainId: '42161' }, artifacts), /Switch your wallet/);
+  const wrongFactory = { ...file, factory: await env.token.getAddress() };
+  wrongFactory.depositAddress = predictRecoveryAddress(wrongFactory, artifacts);
+  await assert.rejects(inspectRecovery(env.provider, wrongFactory, artifacts), /factory is missing or does not match/);
+});
+
+test('recovers from an undeployed funded address using only the saved file and owner wallet', async () => {
+  const prepared = await prepare();
+  await fund(env, prepared.deposit.address, 900_000n); // Below the shielding minimum is recoverable.
+  const file = parseRecoveryFile(JSON.stringify(prepared.file));
+  assert.equal(await env.provider.getCode(file.depositAddress), '0x');
+  const before = await env.token.balanceOf(owner);
+  const feesBefore = await env.token.balanceOf(await env.feeCollector.getAddress());
+  const status = await inspectRecovery(env.provider, file, artifacts);
+  assert.equal(status.deployed, false);
+  assert.equal(status.balance, 900_000n);
+  await assert.rejects(recoveryTransaction(env.provider, file, artifacts, owner, file.config.token, 'recover'), /Deploy.*first/);
+  const deploy = await recoveryTransaction(env.provider, file, artifacts, owner, file.config.token, 'deploy');
+  assert.equal(deploy.to, file.factory);
+  assert.equal(deploy.value, 0n);
+  assert.equal(deploy.chainId, 31337n);
+  await (await env.recovery.sendTransaction(deploy)).wait();
+  await assert.rejects(recoveryTransaction(env.provider, file, artifacts, owner, file.config.token, 'deploy'), /Already deployed/);
+  const recover = await recoveryTransaction(env.provider, file, artifacts, owner, file.config.token, 'recover');
+  assert.equal(recover.to, file.depositAddress);
+  await (await env.recovery.sendTransaction(recover)).wait();
+  assert.equal(await env.token.balanceOf(owner) - before, 900_000n);
+  assert.equal(await env.token.balanceOf(file.depositAddress), 0n);
+  assert.equal(await env.token.balanceOf(await env.feeCollector.getAddress()), feesBefore);
+  await assert.rejects(recoveryTransaction(env.provider, file, artifacts, owner, file.config.token, 'recover'), /no funds/);
+});
+
+test('recovers native currency from a previously undeployed address', async () => {
+  const { file } = await prepare();
+  const amount = parseEther('0.01');
+  await (await env.sender.sendTransaction({ to: file.depositAddress, value: amount })).wait();
+  const status = await inspectRecovery(env.provider, file, artifacts, ZeroAddress);
+  assert.equal(status.balance, amount);
+  await (await env.recovery.sendTransaction(await recoveryTransaction(
+    env.provider, file, artifacts, owner, ZeroAddress, 'deploy'))).wait();
+  const before = await env.provider.getBalance(owner);
+  const receipt = await (await env.recovery.sendTransaction(await recoveryTransaction(
+    env.provider, file, artifacts, owner, ZeroAddress, 'recover'))).wait();
+  assert(receipt);
+  assert.equal(await env.provider.getBalance(owner) - before + receipt.fee, amount);
+  assert.equal(await env.provider.getBalance(file.depositAddress), 0n);
+});
+
+test('recovers a different token without touching the intended token', async () => {
+  const { file } = await prepare();
+  const tokenArtifact = env.contracts['contracts/DemoToken.sol'].DemoToken;
+  const other = await new ContractFactory(tokenArtifact.abi, tokenArtifact.evm.bytecode.object, env.sender).deploy();
+  await other.waitForDeployment();
+  const otherAddress = await other.getAddress();
+  await (await other.getFunction('mint')(file.depositAddress, 123n)).wait();
+  await fund(env, file.depositAddress, 555n);
+  for (const action of ['deploy', 'recover'] as const) {
+    await (await env.recovery.sendTransaction(await recoveryTransaction(
+      env.provider, file, artifacts, owner, otherAddress, action))).wait();
+  }
+  assert.equal(await other.getFunction('balanceOf').staticCall(owner), 123n);
+  assert.equal(await env.token.balanceOf(file.depositAddress), 555n);
+});
+
+test('cannot recover shielded funds, but can recover a later transfer to the same address', async () => {
+  const { file, deposit } = await prepare();
+  await fund(env, file.depositAddress, 2_000_000n);
+  await settle(env, deposit);
+  assert.equal((await inspectRecovery(env.provider, file, artifacts)).balance, 0n);
+  await assert.rejects(recoveryTransaction(env.provider, file, artifacts, owner, file.config.token, 'recover'), /no funds/);
+  await fund(env, file.depositAddress, 100n);
+  const before = await env.token.balanceOf(owner);
+  await (await env.recovery.sendTransaction(await recoveryTransaction(
+    env.provider, file, artifacts, owner, file.config.token, 'recover'))).wait();
+  assert.equal(await env.token.balanceOf(owner) - before, 100n);
+});
+
+test('serves a self-contained static recovery site without a deposit API or file-upload endpoint', async () => {
+  const site = await startRecoverySite(0);
+  try {
+    const page = await fetch(site.url);
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /Recovery file/);
+    assert.doesNotMatch(html, /\{\{brand\./);
+    assert.match(page.headers.get('content-security-policy') ?? '', /connect-src 'self'/);
+    assert.match(page.headers.get('content-security-policy') ?? '', /frame-ancestors 'none'/);
+    for (const path of ['/main.js', '/core.js', '/vendor/ethers.js', '/contracts.json', '/theme.js']) {
+      assert.equal((await fetch(site.url + path)).status, 200);
+    }
+    assert.equal((await fetch(site.url + '/api/state')).status, 404);
+    assert.equal((await fetch(site.url, { method: 'POST', body: '{}' })).status, 404);
+  } finally { await site.close(); }
+});

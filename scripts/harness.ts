@@ -31,10 +31,14 @@ const { ShieldNote, ShieldNoteERC20 } = engine;
 const railgunSource = 'railgun/contracts/logic/RailgunSmartWallet.sol';
 const poseidonSource = 'railgun/contracts/logic/Poseidon.sol';
 
-export function compile(): CompiledContracts {
+export function compile(includeTestContracts = false): CompiledContracts {
   ensureUpstream();
   const sources: Record<string, { content: string }> = {};
   for (const file of ['contracts/DepositFactory.sol', 'contracts/DemoToken.sol']) {
+    sources[file] = { content: readFileSync(`${root}${file}`, 'utf8') };
+  }
+  if (includeTestContracts) {
+    const file = 'test/contracts/Adversarial.sol';
     sources[file] = { content: readFileSync(`${root}${file}`, 'utf8') };
   }
   sources[railgunSource] = { content: readFileSync(`${upstream}/contracts/logic/RailgunSmartWallet.sol`, 'utf8') };
@@ -130,8 +134,8 @@ export async function createEnvironment(
   const chain = await startChain(fork);
   try {
     const { provider } = chain;
-    const [deployer, sender, relayer, recovery, attacker, treasury] = await Promise.all(
-      Array.from({ length: 6 }, (_, index) => provider.getSigner(index)),
+    const [deployer, sender, relayer, recovery, attacker, treasury, feeCollector] = await Promise.all(
+      Array.from({ length: 7 }, (_, index) => provider.getSigner(index)),
     );
     const libraries: Record<string, string> = {};
     for (const inputs of fork ? [] : [2, 3]) {
@@ -173,7 +177,7 @@ export async function createEnvironment(
     const forwarderAt = (address: string, signer = relayer) => new Contract(address,
       contracts['contracts/DepositFactory.sol'].DepositForwarder.abi, signer) as unknown as DepositForwarder;
     return { ...chain, contracts, fork, pool, token, factory, deployer, sender, relayer,
-      recovery, attacker, treasury, forwarderAt };
+      recovery, attacker, treasury, feeCollector, forwarderAt };
   } catch (error) { await chain.close(); throw error; }
 }
 
@@ -189,7 +193,9 @@ export async function createRecipient(): Promise<Recipient> {
     masterPublicKey, viewing };
 }
 
-export async function prepareDeposit(env: Environment, recipientAddress: string): Promise<PreparedDeposit> {
+export async function prepareDeposit(
+  env: Environment, recipientAddress: string, terms: { minDeposit: bigint; maxGasFee?: bigint },
+): Promise<PreparedDeposit> {
   // Preparation knows only the PUBLIC 0zk address. It cannot spend for the recipient.
   const { masterPublicKey, viewingPublicKey } = decodeAddress(recipientAddress);
   const random = randomBytes(16).toString('hex');
@@ -197,8 +203,12 @@ export async function prepareDeposit(env: Environment, recipientAddress: string)
   // Value 1 is only an SDK construction placeholder; the contract reads the live balance.
   const request = await note.serialize(randomBytes(32), viewingPublicKey);
   const salt = hexlify(randomBytes(32));
-  const args: DepositArguments = [salt, await env.token.getAddress(), request.preimage.npk,
-    request.ciphertext, await env.recovery.getAddress()];
+  const args: DepositArguments = [salt, {
+    token: await env.token.getAddress(), notePublicKey: request.preimage.npk,
+    ciphertext: request.ciphertext, recovery: await env.recovery.getAddress(),
+    relayer: await env.relayer.getAddress(), feeRecipient: await env.feeCollector.getAddress(),
+    minDeposit: terms.minDeposit, maxGasFee: terms.maxGasFee ?? 0n,
+  }];
   return { args, address: await env.factory.computeAddress(...args) };
 }
 
@@ -210,9 +220,9 @@ export async function fund(env: Environment, address: string, amount: bigint) {
   return receipt;
 }
 
-export async function settle(env: Environment, deposit: PreparedDeposit) {
+export async function settle(env: Environment, deposit: PreparedDeposit, gasFee = 0n) {
   env.depositPath = await captureDepositPath(env);
-  const receipt = await (await env.factory.connect(env.relayer).deployAndShield(...deposit.args)).wait();
+  const receipt = await (await env.factory.connect(env.relayer).deployAndShield(...deposit.args, gasFee)).wait();
   assert(receipt, 'Shielding transaction must be mined');
   return receipt;
 }

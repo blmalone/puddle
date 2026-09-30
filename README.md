@@ -1,4 +1,8 @@
-# jumpr
+<!-- brand:start -->
+# tobar
+
+[Irish](https://www.logainm.ie/en/themes/109) for “well” or “spring”.
+<!-- brand:end -->
 
 Fund a RAILGUN private wallet with a normal token transfer. Send to a `0x`
 deposit address; a relayer handles shielding—the deposit into RAILGUN.
@@ -28,8 +32,8 @@ spending and recovery keys; the demo uses local test accounts.
 Requires Node.js 24.12+, Git, and [Anvil](https://getfoundry.sh/) (tested with 1.7.1).
 
 ```sh
-git clone https://github.com/blmalone/jumpr.git
-cd jumpr
+git clone https://github.com/blmalone/tobar.git
+cd tobar
 npm ci --ignore-scripts
 npm run setup
 npm run demo
@@ -63,8 +67,22 @@ protocol fees, with recipient decryption and deposit inclusion checked.
 - Deposit data must be verified on the user's device. Dependencies have known
   audit findings.
 
+## Rename
+
+Branding lives in [`brand.json`](brand.json). To change it everywhere:
+
+```sh
+npm run rename -- new-name
+```
+
+Add `--github` to rename the GitHub repository and update `origin` too (requires
+the GitHub CLI). Add `--definition "Meaning of the name."` to set the README definition;
+a new name clears the old meaning. Rebuild or restart the app and docs afterward.
+The command updates package names, lockfiles and README links. It does not commit,
+push, change contracts or move your checkout folder.
+
 ## License
 
-[MIT](LICENSE) for jumpr's original code. Dependencies retain their own terms,
+[MIT](LICENSE) for tobar's original code. Dependencies retain their own terms,
 including `circomlibjs` (GPL-3.0). Setup fetches pinned RAILGUN contracts marked
 `UNLICENSED`; they and generated artifacts are not redistributed here.

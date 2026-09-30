@@ -1,15 +1,16 @@
 {
-  "name": "jumpr",
+  "name": "tobar",
   "version": "0.0.0",
   "description": "A CREATE2-to-RAILGUN deposit proof of concept.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/blmalone/jumpr.git"
+    "url": "https://github.com/blmalone/tobar.git"
   },
   "private": true,
   "type": "module",
   "scripts": {
+    "rename": "node scripts/rename.ts",
     "setup": "node scripts/setup.ts",
     "test": "node --test --test-concurrency=1 test/deposit.test.ts",
     "test:fork": "node --test test/fork.test.ts",

@@ -26,6 +26,8 @@ The deposit configuration fixes the token, encrypted recipient data, recovery wa
 
 ## Verification
 
-The current contracts are **unaudited**. Local tests verify fees, recovery, recipient decryption and deposit inclusion. External-wallet discovery, private spending and production Proof-of-Innocence acceptance remain unverified.
+The current contracts are **unaudited**. Local tests verify fees, recovery, recipient decryption and deposit inclusion.
+
+The recipient confirmed wallet receipt in the first Arbitrum mainnet pilot on 29 September 2026. The revised contracts, cross-chain flow, private spending and production Proof-of-Innocence acceptance still need live validation.
 
 Use the GitHub link above to view the source.

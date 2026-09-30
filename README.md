@@ -41,8 +41,9 @@ funds, independently of the relayer. No admin setters or upgrades.
 
 Standard ERC-20 tokens only; no native ETH shielding, transfer-tax or rebasing
 tokens. Initial transfers remain public, and reusing a recovery address links
-deposits. External-wallet discovery, private spending and production
-Proof-of-Innocence acceptance remain unverified.
+deposits. Wallet receipt was confirmed by the recipient in the first Arbitrum
+mainnet pilot (29 September 2026). The revised contracts, cross-chain flow,
+private spending and production Proof-of-Innocence acceptance need live validation.
 
 - [Fees](docs/src/pages/fees.md) · [Contracts and security](docs/src/pages/contracts.md)
 - [Recovery tool](recovery/README.md)

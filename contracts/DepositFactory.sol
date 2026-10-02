@@ -2,6 +2,7 @@
 pragma solidity 0.8.17;
 
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {DepositBase, DepositConfig, DepositQuote, IERC20, IFeePolicy, validateParties,
     InvalidConfiguration, UnauthorizedRelayer} from "./DepositBase.sol";
 
@@ -15,6 +16,7 @@ struct TokenPolicy {
 /// @notice Shared CREATE2 deployment and fee policy. No owner, setters, upgrades or withdrawal authority.
 abstract contract DepositFactory is IFeePolicy {
     address public immutable pool;
+    address public immutable implementation;
     struct GasPolicy {
         uint120 fixedAllowance;
         uint16 basisPoints;
@@ -28,7 +30,7 @@ abstract contract DepositFactory is IFeePolicy {
     event Deployed(address indexed deposit, bytes32 indexed salt);
     event TokenPolicySet(address indexed token, uint120 fixedAllowance, uint16 basisPoints);
 
-    constructor(address target, TokenPolicy[] memory policies) {
+    constructor(address target, TokenPolicy[] memory policies, bytes memory implementationCode) {
         if (target.code.length == 0) revert InvalidPool();
         if (policies.length == 0) revert InvalidConfiguration();
         pool = target;
@@ -39,6 +41,8 @@ abstract contract DepositFactory is IFeePolicy {
             gasPolicies[policy.token] = GasPolicy(policy.maxGasFee, policy.maxGasFeeBps, true);
             emit TokenPolicySet(address(policy.token), policy.maxGasFee, policy.maxGasFeeBps);
         }
+        // One locked implementation per factory, independently derivable by the recovery tool.
+        implementation = Create2.deploy(0, bytes32(0), abi.encodePacked(implementationCode, abi.encode(target)));
     }
 
     function maxGasFee(IERC20 token, uint256 amount) external view returns (uint256) {
@@ -50,7 +54,8 @@ abstract contract DepositFactory is IFeePolicy {
 
     function computeAddress(bytes32 salt, DepositConfig calldata config) public view returns (address predicted) {
         validateParties(config);
-        predicted = Create2.computeAddress(salt, keccak256(_initCode(config)));
+        _validateRecipient(config.recipient);
+        predicted = Clones.predictDeterministicAddress(implementation, _salt(salt, config));
         if (config.recovery == predicted || config.feeRecipient == predicted) revert InvalidConfiguration();
     }
 
@@ -58,7 +63,8 @@ abstract contract DepositFactory is IFeePolicy {
     function deploy(bytes32 salt, DepositConfig calldata config) public returns (DepositBase forwarder) {
         address predicted = computeAddress(salt, config);
         if (predicted.code.length != 0) return DepositBase(predicted);
-        forwarder = DepositBase(Create2.deploy(0, salt, _initCode(config)));
+        forwarder = DepositBase(Clones.cloneDeterministic(implementation, _salt(salt, config)));
+        forwarder.initialize(config);
         emit Deployed(address(forwarder), salt);
     }
 
@@ -71,6 +77,10 @@ abstract contract DepositFactory is IFeePolicy {
         return address(forwarder);
     }
 
-    // Concrete factories pin one protocol implementation and validate its recipient encoding.
-    function _initCode(DepositConfig calldata config) internal view virtual returns (bytes memory);
+    // Binding all initialization data prevents the same address being claimed with different terms.
+    function _salt(bytes32 salt, DepositConfig calldata config) private pure returns (bytes32) {
+        return keccak256(abi.encode(salt, config));
+    }
+
+    function _validateRecipient(bytes calldata recipient) internal pure virtual;
 }

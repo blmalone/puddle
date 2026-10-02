@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
-import {DepositBase, DepositConfig, IERC20, InvalidConfiguration} from "../DepositBase.sol";
+import {DepositBase, IERC20, InvalidConfiguration} from "../DepositBase.sol";
 import {DepositFactory, TokenPolicy} from "../DepositFactory.sol";
 
 function validatePrivacyPoolsRecipient(bytes memory recipient) pure {
@@ -14,11 +14,13 @@ contract PrivacyPoolsDeposit is DepositBase {
     bytes4 public constant DEPOSIT_SELECTOR = bytes4(keccak256(
         "deposit((uint256[2],uint256[2][2],uint256[2],uint256[4]),(bytes32,bytes),bytes)"
     ));
-    bytes32 public immutable callHash;
+    bytes32 public callHash;
 
-    constructor(address target, DepositConfig memory config) DepositBase(target, config) {
-        validatePrivacyPoolsRecipient(config.recipient);
-        callHash = abi.decode(config.recipient, (bytes32));
+    constructor(address target) DepositBase(target) {}
+
+    function _initializeRecipient(bytes calldata recipient) internal override {
+        validatePrivacyPoolsRecipient(recipient);
+        callHash = abi.decode(recipient, (bytes32));
     }
 
     function _poolCall(IERC20, uint256, bytes calldata data) internal view override returns (bytes memory) {
@@ -32,10 +34,10 @@ contract PrivacyPoolsDeposit is DepositBase {
 }
 
 contract PrivacyPoolsDepositFactory is DepositFactory {
-    constructor(address target, TokenPolicy[] memory policies) DepositFactory(target, policies) {}
+    constructor(address target, TokenPolicy[] memory policies)
+        DepositFactory(target, policies, type(PrivacyPoolsDeposit).creationCode) {}
 
-    function _initCode(DepositConfig calldata config) internal view override returns (bytes memory) {
-        validatePrivacyPoolsRecipient(config.recipient);
-        return abi.encodePacked(type(PrivacyPoolsDeposit).creationCode, abi.encode(pool, config));
+    function _validateRecipient(bytes calldata recipient) internal pure override {
+        validatePrivacyPoolsRecipient(recipient);
     }
 }

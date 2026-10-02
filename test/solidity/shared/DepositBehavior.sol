@@ -3,11 +3,79 @@ pragma solidity ^0.8.17;
 
 import {DepositFixture, TestToken, TestPool, DepositBase, DepositQuote, UnauthorizedRelayer} from "./DepositFixture.sol";
 import {RecoveryReceiver, IRecoverableDeposit} from "fixtures/RecoveryReceiver.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {DepositConfig} from "contracts/DepositBase.sol";
 
 // The identical settlement and recovery suite runs against both protocol adapters.
 abstract contract DepositBehavior is DepositFixture {
     function setUp() public virtual {
         _initialize(1_000_000, 1_000);
+    }
+
+    function test_CloneHasFixedImplementationAndCannotBeReinitialized() public {
+        DepositBase template = DepositBase(factory.implementation());
+        vm.expectRevert("Initializable: contract is already initialized");
+        vm.prank(factoryAddress);
+        template.initialize(config);
+
+        vm.prank(attacker); // Anyone can deploy, but nobody can change the bound terms.
+        DepositBase forwarder = _deploy();
+        assertEq(address(forwarder).code, abi.encodePacked(
+            hex"363d3d373d3d3d363d73", address(template), hex"5af43d82803e903d91602b57fd5bf3"
+        ));
+        assertEq(address(forwarder).code.length, 45);
+        _assertBindings();
+        assertEq(forwarder.pool(), address(pool));
+        assertEq(address(_deploy()), depositAddress);
+
+        config.recovery = attacker;
+        vm.expectRevert("Initializable: contract is already initialized");
+        vm.prank(factoryAddress);
+        forwarder.initialize(config);
+        assertEq(forwarder.recovery(), recovery);
+    }
+
+    function test_OnlyFactoryCanInitializeEvenAnUninitializedClone() public {
+        DepositBase clone = DepositBase(Clones.clone(factory.implementation()));
+        vm.expectRevert(DepositBase.NotFactory.selector);
+        vm.prank(attacker);
+        clone.initialize(config);
+        assertEq(clone.recovery(), address(0));
+    }
+
+    function test_ClonesKeepBalancesAndExecutionStateSeparate() public {
+        DepositBase first = _deploy();
+        DepositConfig memory other = config;
+        other.recovery = attacker;
+        DepositBase second = factory.deploy(salt, other);
+        assertNotEq(address(first), address(second));
+        token.mint(address(first), quote);
+        token.mint(address(second), quote);
+        vm.prank(relayer);
+        _relay(true);
+        assertTrue(first.spent());
+        assertFalse(second.spent());
+        assertEq(second.recovery(), attacker);
+        assertEq(token.balanceOf(address(second)), quote);
+        assertFalse(DepositBase(factory.implementation()).spent());
+        vm.prank(attacker);
+        second.recover(token);
+        assertEq(token.balanceOf(attacker), quote);
+    }
+
+    function test_RepeatedRecoveryDoesNotCancelAnUnspentDeposit() public {
+        DepositBase forwarder = _deploy();
+        for (uint256 i; i < 2; ++i) {
+            token.mint(depositAddress, quote);
+            vm.prank(recovery);
+            forwarder.recover(token);
+            assertEq(token.balanceOf(recovery), quote * (i + 1));
+            assertFalse(forwarder.spent());
+        }
+        token.mint(depositAddress, quote);
+        vm.prank(relayer);
+        _relay(true);
+        assertTrue(forwarder.spent());
     }
 
     function test_ExpiredQuoteCannotDeployOrPayFees() public {

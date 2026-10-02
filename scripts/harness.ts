@@ -48,7 +48,7 @@ export function compile(includeTestContracts = false): CompiledContracts {
     language: 'Solidity', sources,
     settings: {
       optimizer: { enabled: true, runs: 200 },
-      outputSelection: { '*': { '*': ['abi', 'evm.bytecode', 'evm.deployedBytecode', 'storageLayout'] } },
+      outputSelection: { '*': { '': ['ast'], '*': ['abi', 'evm.bytecode', 'evm.deployedBytecode', 'storageLayout'] } },
     },
   };
   const output: CompilerOutput = JSON.parse(solc.compile(JSON.stringify(input), {
@@ -63,6 +63,20 @@ export function compile(includeTestContracts = false): CompiledContracts {
   const errors = (output.errors ?? []).filter((entry) => entry.severity === 'error');
   if (errors.length) throw new Error(errors.map((entry) => entry.formattedMessage).join('\n'));
   assert(output.contracts, 'Solidity compilation must produce contracts');
+  // Name immutable bytecode offsets from the compiler AST; never depend on changing AST IDs.
+  const immutableNames = new Map(Object.values(output.sources ?? {}).flatMap(source =>
+    source.ast.nodes.flatMap(contract => (contract.nodes ?? [])
+      .filter(node => node.mutability === 'immutable').map(node => [String(node.id), node.name] as const))));
+  for (const source of Object.values(output.contracts)) {
+    for (const contract of Object.values(source)) {
+      const bytecode = contract.evm.deployedBytecode;
+      bytecode.immutableReferences = Object.fromEntries(Object.entries(bytecode.immutableReferences).map(([id, refs]) => {
+        const name = immutableNames.get(id);
+        assert(name, `Unknown immutable ${id}`);
+        return [name, refs];
+      }));
+    }
+  }
   return output.contracts;
 }
 

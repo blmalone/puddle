@@ -4,7 +4,7 @@ pragma solidity 0.8.17;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 error InvalidConfiguration();
 error UnauthorizedRelayer();
@@ -35,17 +35,17 @@ function validateParties(DepositConfig memory config) pure {
 }
 
 /// @notice Shared single-use settlement and owner-only recovery. Unaudited.
-/// @dev Protocol adapters only build a call to the immutable pool. No delegatecall or mutable targets.
-abstract contract DepositBase is ReentrancyGuard {
+/// @dev ERC-1167 clones share fixed code and pool. Initialization adds no upgrade authority.
+abstract contract DepositBase is ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
     using Address for address;
 
     uint256 public constant SERVICE_FEE_BPS = 10; // 0.1%, rounded down.
     address public immutable factory;
     address public immutable pool;
-    address public immutable recovery;
-    address public immutable relayer;
-    address public immutable feeRecipient;
+    address public recovery;
+    address public relayer;
+    address public feeRecipient;
     bool public spent;
 
     error AlreadyExecuted();
@@ -56,21 +56,33 @@ abstract contract DepositBase is ReentrancyGuard {
     error IncompleteDeposit();
     error WrongDepositCall();
     error NotRecoveryOwner();
+    error NotFactory();
 
     event Executed(address indexed token, uint256 amount, uint256 serviceFee, uint256 gasFee, uint256 poolAmount);
     event Recovered(address indexed asset, uint256 amount);
 
-    constructor(address target, DepositConfig memory config) {
-        validateParties(config);
-        if (target.code.length == 0 || config.recovery == address(this) || config.feeRecipient == address(this)) {
-            revert InvalidConfiguration();
-        }
+    constructor(address target) {
+        if (target.code.length == 0) revert InvalidConfiguration();
         factory = msg.sender;
         pool = target;
+        _disableInitializers();
+    }
+
+    /// @dev The factory creates and initializes each clone atomically. Terms cannot be reset.
+    function initialize(DepositConfig calldata config) external initializer {
+        if (msg.sender != factory) revert NotFactory();
+        validateParties(config);
+        if (config.recovery == address(this) || config.feeRecipient == address(this)) {
+            revert InvalidConfiguration();
+        }
+        __ReentrancyGuard_init();
         recovery = config.recovery;
         relayer = config.relayer;
         feeRecipient = config.feeRecipient;
+        _initializeRecipient(config.recipient);
     }
+
+    function _initializeRecipient(bytes calldata recipient) internal virtual;
 
     /// @notice Pool fees, if any, are taken from poolAmount by the selected protocol.
     function preview(DepositQuote calldata quote) public view returns (uint256 serviceFee, uint256 poolAmount) {

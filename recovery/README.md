@@ -17,7 +17,8 @@ recover the selected token or native currency in a separate transaction.
 ## Verification
 
 The tool validates the file, computes the deposit address and compares the
-factory's onchain code with its own build. It checks the network and recovery
+factory and fixed implementation's onchain code with its own build. Deployed
+addresses must contain the exact expected ERC-1167 clone. It checks the network and recovery
 owner before each transaction. Imported transaction data is never trusted.
 
 Keep the file private and compare its addresses with your records. Validation

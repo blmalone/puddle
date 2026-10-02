@@ -20,11 +20,15 @@ export function recoveryArtifacts(contracts: CompiledContracts): RecoveryArtifac
     const forwarder = source[`${protocol}Deposit`];
     assert.deepEqual(factory.evm.bytecode.linkReferences, {});
     assert.deepEqual(forwarder.evm.bytecode.linkReferences, {});
-    const references = Object.values(factory.evm.deployedBytecode.immutableReferences);
-    assert.equal(references.length, 1, 'Review recovery validation after changing factory immutables');
-    assert(references[0].length > 0 && references[0].every(reference => reference.length === 32));
-    return { forwarderCreationCode: `0x${forwarder.evm.bytecode.object}`,
-      factoryRuntimeCode: `0x${factory.evm.deployedBytecode.object}`, poolReferences: references[0] };
+    function runtime(artifact: typeof factory, names: string[]) {
+      const references = artifact.evm.deployedBytecode.immutableReferences;
+      assert.deepEqual(Object.keys(references).sort(), names.sort(), 'Review recovery validation after changing immutables');
+      assert(Object.values(references).every(refs => refs.length > 0 && refs.every(ref => ref.length === 32)));
+      return { code: `0x${artifact.evm.deployedBytecode.object}`, references };
+    }
+    return { implementationCreationCode: `0x${forwarder.evm.bytecode.object}`,
+      factory: runtime(factory, ['pool', 'implementation']),
+      implementation: runtime(forwarder, ['factory', 'pool']) };
   }
   return { railgun: build('Railgun'), 'privacy-pools': build('PrivacyPools') };
 }

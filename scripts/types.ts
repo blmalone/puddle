@@ -62,6 +62,7 @@ export type CompiledContracts = Record<string, Record<string, ContractArtifact>>
 
 export interface CompilerOutput {
   contracts?: CompiledContracts;
+  sources?: Record<string, { ast: { nodes: { nodes?: { id: number; name: string; mutability?: string }[] }[] } }>;
   errors?: { severity: string; formattedMessage: string }[];
 }
 

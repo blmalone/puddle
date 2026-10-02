@@ -18,6 +18,14 @@ but cannot exceed this ceiling or consume the whole deposit. The charge is quote
 it does not measure actual gas spent. The relayer can charge up to the ceiling.
 If gas is too expensive, it must wait or leave the funds recoverable.
 
+This follows the fee pattern in Across's published
+[deposit-address implementation](https://github.com/across-protocol/contracts/blob/a634bea927668519c748e46036181c89c7bd9b40/contracts/periphery/counterfactual/CounterfactualDepositSpokePool.sol):
+fixed destination instructions, a later execution fee and an onchain ceiling.
+Across verifies its service's fee signature; Puddle restricts execution to its
+designated relayer. Neither mechanism proves the user accepted an exact quote.
+Apps should distinguish the estimated charge from the enforced maximum. Funding
+still needs only an ordinary transfer, with no token approval or extra signature.
+
 Privacy Pools quotes must preserve the net amount in the prepared deposit proof.
 
 Production ceilings have not been chosen. The local factory uses a test allowance

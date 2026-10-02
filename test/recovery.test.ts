@@ -138,6 +138,29 @@ test('recovers native currency from a previously undeployed address', async () =
   assert.equal(await env.provider.getBalance(file.depositAddress), 0n);
 });
 
+test('rejects substituted implementation or clone code before allowing recovery', async () => {
+  const { file } = await prepare();
+  await fund(env, file.depositAddress, 123n);
+  const implementation: string = await env.factory.getFunction('implementation')();
+  const original = await env.provider.getCode(implementation);
+  try {
+    await env.provider.send('anvil_setCode', [implementation, '0x00']);
+    await assert.rejects(inspectRecovery(env.provider, file, artifacts), /implementation is missing or does not match/);
+  } finally {
+    await env.provider.send('anvil_setCode', [implementation, original]);
+  }
+  await (await env.recovery.sendTransaction(await recoveryTransaction(
+    env.provider, file, artifacts, owner, file.asset, 'deploy'))).wait();
+  const clone = await env.provider.getCode(file.depositAddress);
+  try {
+    await env.provider.send('anvil_setCode', [file.depositAddress, '0x00']);
+    await assert.rejects(inspectRecovery(env.provider, file, artifacts), /not the expected fixed clone/);
+  } finally {
+    await env.provider.send('anvil_setCode', [file.depositAddress, clone]);
+  }
+  assert.equal((await inspectRecovery(env.provider, file, artifacts)).balance, 123n);
+});
+
 test('recovers a different token without touching the intended token', async () => {
   const { file } = await prepare();
   const tokenArtifact = env.contracts['test/contracts/DemoToken.sol'].DemoToken;

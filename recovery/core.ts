@@ -1,4 +1,4 @@
-import { AbiCoder, Contract, Interface, ZeroAddress, concat, getAddress, getCreate2Address,
+import { AbiCoder, Contract, Interface, ZeroAddress, ZeroHash, concat, getAddress, getCreate2Address,
   keccak256, zeroPadValue } from 'ethers';
 import type { Provider, TransactionRequest } from 'ethers';
 
@@ -25,9 +25,13 @@ export interface RecoveryFile {
 
 // Supplied by this tool's build, NEVER by an imported recovery file.
 export interface RecoveryBuild {
-  forwarderCreationCode: string;
-  factoryRuntimeCode: string;
-  poolReferences: { start: number; length: number }[];
+  implementationCreationCode: string;
+  factory: RuntimeBuild;
+  implementation: RuntimeBuild;
+}
+interface RuntimeBuild {
+  code: string;
+  references: Record<string, { start: number; length: number }[]>;
 }
 export type RecoveryArtifacts = Record<RecoveryFile['protocol'], RecoveryBuild>;
 export const recoveryAsset = (file: RecoveryFile) => file.asset;
@@ -84,9 +88,19 @@ export function parseRecoveryFile(text: string): RecoveryFile {
   return result;
 }
 
+function implementationAddress(file: RecoveryFile, build: RecoveryBuild): string {
+  const constructor = AbiCoder.defaultAbiCoder().encode(['address'], [file.pool]);
+  return getCreate2Address(file.factory, ZeroHash, keccak256(concat([build.implementationCreationCode, constructor])));
+}
+
+function cloneCode(implementation: string): string {
+  return concat(['0x363d3d373d3d3d363d73', implementation, '0x5af43d82803e903d91602b57fd5bf3']);
+}
+
 export function predictRecoveryAddress(file: RecoveryFile, artifacts: RecoveryArtifacts): string {
-  const constructor = AbiCoder.defaultAbiCoder().encode(['address', configTuple], [file.pool, file.config]);
-  return getCreate2Address(file.factory, file.salt, keccak256(concat([artifacts[file.protocol].forwarderCreationCode, constructor])));
+  const implementation = implementationAddress(file, artifacts[file.protocol]);
+  const salt = keccak256(AbiCoder.defaultAbiCoder().encode(['bytes32', configTuple], [file.salt, file.config]));
+  return getCreate2Address(file.factory, salt, keccak256(concat(['0x3d602d80600a3d3981f3', cloneCode(implementation)])));
 }
 
 export function checkRecoveryAddress(file: RecoveryFile, artifacts: RecoveryArtifacts) {
@@ -95,12 +109,15 @@ export function checkRecoveryAddress(file: RecoveryFile, artifacts: RecoveryArti
   }
 }
 
-function factoryCode(file: RecoveryFile, artifacts: RecoveryBuild): string {
-  let code = artifacts.factoryRuntimeCode.slice(2);
-  const pool = zeroPadValue(file.pool, 32).slice(2).toLowerCase();
-  for (const { start, length } of artifacts.poolReferences) {
-    if (length !== 32) throw new Error('Unsupported factory build.');
-    code = code.slice(0, start * 2) + pool + code.slice((start + length) * 2);
+function runtimeCode(build: RuntimeBuild, values: Record<string, string>): string {
+  let code = build.code.slice(2);
+  for (const [name, references] of Object.entries(build.references)) {
+    if (!values[name]) throw new Error('Unsupported contract build.');
+    const value = zeroPadValue(values[name], 32).slice(2).toLowerCase();
+    for (const { start, length } of references) {
+      if (length !== 32) throw new Error('Unsupported contract build.');
+      code = code.slice(0, start * 2) + value + code.slice((start + length) * 2);
+    }
   }
   return `0x${code}`;
 }
@@ -119,16 +136,23 @@ export async function inspectRecovery(
   if ((await provider.getNetwork()).chainId !== BigInt(file.chainId)) {
     throw new Error(`Switch your wallet to chain ${file.chainId}, then check again.`);
   }
-  const [factory, deposit] = await Promise.all([
-    provider.getCode(file.factory), provider.getCode(file.depositAddress),
+  const build = artifacts[file.protocol];
+  const implementation = implementationAddress(file, build);
+  const [factory, template, deposit] = await Promise.all([
+    provider.getCode(file.factory), provider.getCode(implementation), provider.getCode(file.depositAddress),
   ]);
-  if (factory.toLowerCase() !== factoryCode(file, artifacts[file.protocol]).toLowerCase()) {
+  if (factory.toLowerCase() !== runtimeCode(build.factory, { pool: file.pool, implementation }).toLowerCase()) {
     throw new Error('The factory is missing or does not match this tool’s contract build.');
   }
-  // Matching factory code + locally calculated CREATE2 address binds the forwarder code
-  // and constructor arguments. Do not trust a file-supplied code hash or factory reply.
+  if (template.toLowerCase() !== runtimeCode(build.implementation, { pool: file.pool, factory: file.factory }).toLowerCase()) {
+    throw new Error('The implementation is missing or does not match this tool’s contract build.');
+  }
+  // Verify both fixed implementations and the exact clone, without trusting a factory reply.
   const deployed = deposit !== '0x';
   if (deployed) {
+    if (deposit.toLowerCase() !== cloneCode(implementation).toLowerCase()) {
+      throw new Error('The deposit is not the expected fixed clone.');
+    }
     const forwarder = new Contract(file.depositAddress, forwarderABI, provider);
     if (getAddress(await forwarder.getFunction('recovery').staticCall()) !== file.config.recovery) {
       throw new Error('The deployed recovery owner does not match.');

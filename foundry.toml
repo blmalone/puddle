@@ -10,6 +10,7 @@ remappings = [
   "forge-std/=.cache/forge-std/src/",
   "fixtures/=test/contracts/",
   "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
+  "@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/",
   "railgun/=.cache/railgun-contract/",
 ]
 solc = "0.8.17"

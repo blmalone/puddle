@@ -49,8 +49,16 @@ proof or SDK.
 
 `DepositBase` owns execution, fee collection and recovery; `DepositFactory` owns
 fee policy and CREATE2 deployment. Protocol contracts only build or validate the
-pool call. TypeScript follows the same split in `protocols/`. There are no retained
+pool call. Each factory deploys one locked implementation using CREATE2 with a zero
+salt; deposits are fixed ERC-1167 clones initialized in their creation transaction.
+The clone salt is `keccak256(abi.encode(salt, config))`, binding every permanent
+setting. TypeScript follows the same split in `protocols/`. There are no retained
 legacy execution paths.
+
+Recovery withdraws funds without cancelling the address. Further transfers remain
+recoverable, and an unspent deposit remains executable. A production worker may
+stop automatic execution after observing a recovery event; this is service behavior,
+not an onchain restriction.
 
 ## Walkaway requirement
 

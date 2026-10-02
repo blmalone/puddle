@@ -21,6 +21,7 @@ export const configTuple = 'tuple(bytes recipient,address recovery,address relay
 export const quoteTuple = 'tuple(address token,uint256 amount,uint256 gasFee,uint256 deadline)';
 export const factoryABI = new Interface([
   'function pool() view returns (address)',
+  'function implementation() view returns (address)',
   'function maxGasFee(address token,uint256 amount) view returns (uint256)',
   'function gasPolicies(address token) view returns (uint120 fixedAllowance,uint16 basisPoints,bool supported)',
   `function computeAddress(bytes32 salt,${configTuple} config) view returns (address)`,

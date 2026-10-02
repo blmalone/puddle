@@ -41,7 +41,8 @@ Restarting clears the local chain. Use `npm run demo` for a terminal-only run.
 ## Design
 
 Both protocols share fee limits, single-use execution, CREATE2 deployment and
-owner recovery. Small adapters build or validate each pool's deposit call.
+owner recovery. Each deposit is a fixed ERC-1167 clone. Small adapters build or
+validate each pool's deposit call.
 
 An address fixes its recipient instructions, recovery owner, relayer and fee
 recipient. Quotes supply token, amount, gas charge and expiry separately. RAILGUN

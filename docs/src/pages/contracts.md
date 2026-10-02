@@ -5,18 +5,22 @@ outline: false
 
 # Contracts & security
 
-One factory and one single-use deposit contract per protocol. No Puddle admin
+One factory and one fixed implementation per protocol; each deposit is a single-use
+[ERC-1167 clone](https://eips.ethereum.org/EIPS/eip-1167). No Puddle admin
 setters or upgrades; the underlying pools have their own governance.
 
 | Contract | Interface |
 | --- | --- |
-| Factory | `computeAddress`, `deploy`, `deployAndExecute`, `gasPolicies`, `maxGasFee` |
+| Factory | `computeAddress`, `deploy`, `deployAndExecute`, `implementation`, `gasPolicies`, `maxGasFee` |
 | Deposit | `preview`, `execute`, `recover`, `recoverNative` |
 
 RAILGUN and Privacy Pools share `DepositBase` and `DepositFactory`: permissions,
 fee policy, execution, recovery and protection against callbacks entering again.
-Protocol adapters only build or validate the pool call. The shared code is compiled
-into each contract; it adds no deployment, delegate calls or admin authority.
+Protocol adapters only build or validate the pool call. Clones delegate to their
+factory's fixed implementation. The factory creates and initializes each clone in
+one transaction; initialization cannot run again, including on the implementation.
+The salt includes every deposit setting, so changing the recipient or recovery
+wallet changes the address. No implementation or deposit setting can be replaced.
 
 ## Permissions
 
@@ -31,6 +35,10 @@ transaction authorizes that quote; the user needs no extra signature. Refreshing
 the quote does not change the address. The contract checks expiry, funding, fee limits
 and that some value remains for shielding. It consumes exactly the quoted amount
 once; excess stays recoverable. Fees and shielding succeed or revert together.
+
+Recovery does not cancel an address. Repeated and later transfers remain
+recoverable; an unspent address can still shield if funded again. The service may
+stop automatic retries after a recovery event, without changing those permissions.
 
 RAILGUN accepts any supported token and amount. Privacy Pools commits a complete
 prepared deposit call, including the proof and encrypted recipient data. Its gas

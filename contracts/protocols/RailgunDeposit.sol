@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
-import {DepositBase, DepositConfig, IERC20, InvalidConfiguration} from "../DepositBase.sol";
+import {DepositBase, IERC20, InvalidConfiguration} from "../DepositBase.sol";
 import {DepositFactory, TokenPolicy} from "../DepositFactory.sol";
 import {ShieldRequest, ShieldCiphertext, CommitmentPreimage, TokenData, TokenType}
     from "railgun/contracts/logic/Globals.sol";
@@ -16,12 +16,14 @@ function validateRailgunRecipient(bytes memory recipient) pure {
 }
 
 contract RailgunDeposit is DepositBase {
-    bytes32 public immutable notePublicKey;
+    bytes32 public notePublicKey;
     ShieldCiphertext private ciphertext;
 
-    constructor(address target, DepositConfig memory config) DepositBase(target, config) {
-        validateRailgunRecipient(config.recipient);
-        (notePublicKey, ciphertext) = abi.decode(config.recipient, (bytes32, ShieldCiphertext));
+    constructor(address target) DepositBase(target) {}
+
+    function _initializeRecipient(bytes calldata recipient) internal override {
+        validateRailgunRecipient(recipient);
+        (notePublicKey, ciphertext) = abi.decode(recipient, (bytes32, ShieldCiphertext));
     }
 
     function _poolCall(IERC20 token, uint256 amount, bytes calldata data) internal view override returns (bytes memory) {
@@ -36,10 +38,10 @@ contract RailgunDeposit is DepositBase {
 }
 
 contract RailgunDepositFactory is DepositFactory {
-    constructor(address target, TokenPolicy[] memory policies) DepositFactory(target, policies) {}
+    constructor(address target, TokenPolicy[] memory policies)
+        DepositFactory(target, policies, type(RailgunDeposit).creationCode) {}
 
-    function _initCode(DepositConfig calldata config) internal view override returns (bytes memory) {
-        validateRailgunRecipient(config.recipient);
-        return abi.encodePacked(type(RailgunDeposit).creationCode, abi.encode(pool, config));
+    function _validateRecipient(bytes calldata recipient) internal pure override {
+        validateRailgunRecipient(recipient);
     }
 }

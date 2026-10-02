@@ -18,8 +18,9 @@ interface PoolSession<T extends PreparedPoolDeposit> {
   }): Promise<T>;
 }
 
-export function createPrivacyPoolsAdapter(deployment: Deployment, entrypointABI: Interface) {
-  const common = createDepositAdapter('privacy-pools', deployment);
+export function createPrivacyPoolsAdapter(configuration: Deployment, entrypointABI: Interface) {
+  const common = createDepositAdapter('privacy-pools', configuration);
+  const { deployment } = common;
   const adapter = {
     ...common,
     async validateExecution(deposit: PrivacyPoolsDeposit, provider: Provider) {

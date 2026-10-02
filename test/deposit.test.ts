@@ -87,6 +87,17 @@ test('shared workflow refuses changed records, wrong chains and unauthorized wal
   assert.equal(await env.provider.getCode(deposit.address), '0x');
 });
 
+test('adapter checks keep their configured deployment when the caller changes its configuration', async () => {
+  const { deposit } = await prepared();
+  const configuration = { ...env.adapter.deployment };
+  const adapter = createRailgunAdapter(configuration);
+  configuration.chainId = 42161n;
+  configuration.factory = await env.attacker.getAddress();
+  configuration.pool = configuration.factory;
+  assert.deepEqual(adapter.deployment, env.adapter.deployment);
+  assert.deepEqual(await adapter.quote(env.provider, deposit, deposit.quote), deposit);
+});
+
 test('shared funding checks permit top-ups, enforce the gas cap and refuse replay after confirmation', async () => {
   const { deposit } = await prepared();
   await fund(env, deposit.address, amount - 1n);

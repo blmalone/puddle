@@ -71,11 +71,15 @@ abstract contract DepositBehavior is DepositFixture {
             forwarder.recover(token);
             assertEq(token.balanceOf(recovery), quote * (i + 1));
             assertFalse(forwarder.spent());
+            vm.expectRevert(_insufficientError());
+            vm.prank(relayer);
+            _relay(false);
         }
         token.mint(depositAddress, quote);
         vm.prank(relayer);
         _relay(true);
         assertTrue(forwarder.spent());
+        assertEq(pool.calls(), 1);
     }
 
     function test_ExpiredQuoteCannotDeployOrPayFees() public {
@@ -263,22 +267,6 @@ abstract contract DepositBehavior is DepositFixture {
         assertTrue(pool.reentryBlocked());
         assertEq(pool.calls(), 1);
         assertEq(token.balanceOf(feeRecipient), quote / 1_000 + gasCharge);
-    }
-
-    function test_RecoveryBeforeRelayDoesNotPermanentlyCancelAddress() public {
-        token.mint(depositAddress, quote);
-        DepositBase forwarder = _deploy();
-        vm.prank(recovery);
-        forwarder.recover(token);
-        vm.expectRevert(_insufficientError());
-        vm.prank(relayer);
-        _relay(false);
-        token.mint(depositAddress, quote);
-        vm.prank(relayer);
-        _relay(false);
-        assertTrue(forwarder.spent());
-        assertEq(token.balanceOf(recovery), quote);
-        assertEq(pool.calls(), 1);
     }
 
     function test_NativeRecoveryRejectsReentryAndPreservesRejectedPayments() public {

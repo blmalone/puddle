@@ -54,9 +54,10 @@ export interface DepositAdapter<P extends Protocol = Protocol> extends ProtocolD
   relayData(deposit: DepositExecution<P>): string;
 }
 
-export function createDepositAdapter<P extends Protocol>(protocol: P, deployment: Deployment) {
+export function createDepositAdapter<P extends Protocol>(protocol: P, configuration: Deployment) {
+  const deployment = Object.freeze({ ...configuration });
   const adapter: DepositAdapter<P> = {
-    protocol, deployment: Object.freeze({ ...deployment }), factoryABI,
+    protocol, deployment, factoryABI,
     async validateExecution(deposit, provider) {
       const { quote } = deposit;
       if (quote.amount <= 0n || quote.amount >= (1n << 120n) || quote.gasFee < 0n

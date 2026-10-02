@@ -5,6 +5,7 @@ import { compile, environment, prepare, mined, addressOf, hex } from './harness.
 import type { Environment } from './harness.ts';
 import { NoteStatus } from '../../.cache/privacy-pools-v2/packages/sdk/dist/index.js';
 import { inspectDeposit, recoveryTransaction, relayDeposit, validateDeposit } from '../../protocols/deposit.ts';
+import { createPrivacyPoolsAdapter } from '../../protocols/privacy-pools.ts';
 
 let env: Environment;
 before(async () => { env = await environment(compile()); });
@@ -96,6 +97,17 @@ test('ordinary transfer becomes a recipient-owned, discoverable private note', a
     await mined(env.recipient.sendTransaction(await recoveryTransaction(env.adapter, quote, env.provider, recipientAddress, quote.quote.token)));
     assert.equal(await balance(recipientAddress), beforeBalance + 16n);
   });
+});
+
+test('preparation and quote checks keep the configured pool when the caller changes its configuration', async () => {
+  const recipient = await env.provider.getSigner(6);
+  await (await env.session(recipient)).registerKeystore();
+  const configuration = { ...env.adapter.deployment };
+  const adapter = createPrivacyPoolsAdapter(configuration, env.entrypoint.interface);
+  configuration.pool = await env.attacker.getAddress();
+  const deposit = await prepare({ ...env, adapter }, await addressOf(recipient));
+  assert.equal(deposit.pool, await env.entrypoint.getAddress());
+  await adapter.validateExecution(deposit, env.provider);
 });
 
 test('failed execution is atomic and the owner recovers an undeployed address without the relayer', async () => {

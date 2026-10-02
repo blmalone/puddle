@@ -19,9 +19,9 @@ the balance. The file is not uploaded. You can also run the tool yourself with
 2. Recover the selected asset (a second wallet transaction).
 3. The balance returns to the fixed recovery wallet.
 
-The tool checks the deposit address and factory code against its own contract
-build. The current format supports both RAILGUN and Privacy Pools; old pre-release
-formats and unknown versions are rejected. The demo
+The tool checks the deposit address, factory, fixed implementation and any deployed
+clone against its own contract build. The current format supports both RAILGUN and
+Privacy Pools; old pre-release formats and unknown versions are rejected. The demo
 uses a local chain and test recovery wallet; the public recovery site is not deployed yet.
 
 Recovery also works for partial deposits, wrong tokens and transfers received after shielding. Use `recoverNative()` for native currency accidentally sent before deployment or forcibly received.

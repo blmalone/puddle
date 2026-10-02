@@ -5,9 +5,23 @@ outline: false
 
 # Fees
 
-The service charges **0.1% of the received balance**, rounded down, plus a gas charge in the deposit token. RAILGUN's own fee applies to the remainder.
+The service charges **0.1% of the quoted deposit amount**, rounded down, plus a gas charge in the deposit token. The selected pool's own fee also applies. Any excess balance stays recoverable.
 
-The gas charge cannot exceed the limit fixed into the deposit address. It is a quoted charge, not an onchain measurement of gas spent.
+The factory fixes each supported token's ceiling:
+
+```text
+maximum gas charge = fixed allowance + deposit amount × basis points / 10,000
+```
+
+The 0.1% service fee is separate. Quotes can change without changing the address,
+but cannot exceed this ceiling or consume the whole deposit. The charge is quoted;
+it does not measure actual gas spent. The relayer can charge up to the ceiling.
+If gas is too expensive, it must wait or leave the funds recoverable.
+
+Privacy Pools quotes must preserve the net amount in the prepared deposit proof.
+
+Production ceilings have not been chosen. The local factory uses a test allowance
+of 2 USDC plus 0.5%; the demo's actual gas charge is 0.2 USDC.
 
 ## Local example
 

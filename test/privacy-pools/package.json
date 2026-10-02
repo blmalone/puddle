@@ -1,0 +1,23 @@
+{
+  "name": "puddle-privacy-pools-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node setup.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-concurrency=1 integration.test.ts"
+  },
+  "dependencies": {
+    "ethers": "6.17.0",
+    "solc": "0.8.32"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "typescript": "7.0.2"
+  },
+  "overrides": {
+    "solc": {
+      "tmp": "0.2.7"
+    }
+  }
+}

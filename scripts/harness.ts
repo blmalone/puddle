@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -8,22 +7,24 @@ import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import solc from 'solc';
 import { poseidonContract } from 'circomlibjs';
-import { Contract, ContractFactory, JsonRpcProvider, getBytes, hexlify, toBeHex } from 'ethers';
-import type { ContractTransactionReceipt } from 'ethers';
+import { Contract, ContractFactory, JsonRpcProvider, getBytes, toBeHex } from 'ethers';
+import type { TransactionReceipt } from 'ethers';
 import engine from '@railgun-community/engine';
 import { ensureUpstream, root, upstream, upstreamCommit } from './setup.ts';
-import type { CompiledContracts, CompilerOutput, ContractArtifact, DepositArguments,
+import type { CompiledContracts, CompilerOutput, ContractArtifact,
   DepositFactory, DepositForwarder, DepositPath, Environment, ForkConfig,
   PreparedDeposit, Recipient, TokenContract } from './types.ts';
 import type { RailgunSmartWallet, ShieldEvent } from
   '../node_modules/@railgun-community/engine/dist/abi/typechain/RailgunSmartWallet.js';
+import { createRailgunAdapter } from '../protocols/railgun.ts';
+import { mined, relayDeposit } from '../protocols/deposit.ts';
 
 // The engine pins these internal helpers; they aren't exported at package root.
 const require = createRequire(import.meta.url);
 const engineDist = dirname(require.resolve('@railgun-community/engine'));
 const { deriveNodes, WalletNode } = require(join(engineDist, 'key-derivation/wallet-node.js')) as
   typeof import('../node_modules/@railgun-community/engine/dist/key-derivation/wallet-node.js');
-const { encodeAddress, decodeAddress } = require(join(engineDist, 'key-derivation/bech32.js')) as
+const { encodeAddress } = require(join(engineDist, 'key-derivation/bech32.js')) as
   typeof import('../node_modules/@railgun-community/engine/dist/key-derivation/bech32.js');
 const { getSharedSymmetricKey } = require(join(engineDist, 'utils/keys-utils.js')) as
   typeof import('../node_modules/@railgun-community/engine/dist/utils/keys-utils.js');
@@ -34,12 +35,13 @@ const poseidonSource = 'railgun/contracts/logic/Poseidon.sol';
 export function compile(includeTestContracts = false): CompiledContracts {
   ensureUpstream();
   const sources: Record<string, { content: string }> = {};
-  for (const file of ['contracts/DepositFactory.sol', 'contracts/DemoToken.sol']) {
+  for (const file of ['contracts/DepositBase.sol', 'contracts/DepositFactory.sol', 'contracts/protocols/RailgunDeposit.sol', 'contracts/protocols/PrivacyPoolsDeposit.sol', 'test/contracts/DemoToken.sol']) {
     sources[file] = { content: readFileSync(`${root}${file}`, 'utf8') };
   }
   if (includeTestContracts) {
-    const file = 'test/contracts/Adversarial.sol';
-    sources[file] = { content: readFileSync(`${root}${file}`, 'utf8') };
+    for (const file of ['test/contracts/Adversarial.sol', 'test/contracts/RecoveryReceiver.sol']) {
+      sources[file] = { content: readFileSync(`${root}${file}`, 'utf8') };
+    }
   }
   sources[railgunSource] = { content: readFileSync(`${upstream}/contracts/logic/RailgunSmartWallet.sol`, 'utf8') };
   const input = {
@@ -64,9 +66,8 @@ export function compile(includeTestContracts = false): CompiledContracts {
   return output.contracts;
 }
 
-export const FORK: ForkConfig = {
+export const FORK: Omit<ForkConfig, 'block'> = {
   rpc: 'https://arb1.arbitrum.io/rpc',
-  block: 510058182,
   pool: '0xFA7093CDD9EE6932B4eb2c9e1cde7CE00B1FA4b9',
   token: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
 };
@@ -162,7 +163,7 @@ export async function createEnvironment(
       pool = new Contract(fork.pool, contracts[railgunSource].RailgunSmartWallet.abi, deployer) as
         unknown as RailgunSmartWallet;
       token = new Contract(fork.token, [
-        ...contracts['contracts/DemoToken.sol'].DemoToken.abi,
+        ...contracts['test/contracts/DemoToken.sol'].DemoToken.abi,
         'function deposit() payable',
       ], deployer) as unknown as TokenContract;
       assert.equal(await token.symbol(), 'WETH');
@@ -170,13 +171,15 @@ export async function createEnvironment(
       pool = await deploy(railgunSource, 'RailgunSmartWallet') as unknown as RailgunSmartWallet;
       await (await pool.initializeRailgunLogic(await treasury.getAddress(), 25, 25, 0,
         await deployer.getAddress())).wait();
-      token = await deploy('contracts/DemoToken.sol', 'DemoToken') as TokenContract;
+      token = await deploy('test/contracts/DemoToken.sol', 'DemoToken') as TokenContract;
     }
-    const factory = await deploy('contracts/DepositFactory.sol', 'DepositFactory',
-      [await pool.getAddress()]) as DepositFactory;
+    const factory = await deploy('contracts/protocols/RailgunDeposit.sol', 'RailgunDepositFactory',
+      [await pool.getAddress(), [{ token: await token.getAddress(), maxGasFee: 2_000_000n, maxGasFeeBps: 50 }]]) as DepositFactory;
     const forwarderAt = (address: string, signer = relayer) => new Contract(address,
-      contracts['contracts/DepositFactory.sol'].DepositForwarder.abi, signer) as unknown as DepositForwarder;
-    return { ...chain, contracts, fork, pool, token, factory, deployer, sender, relayer,
+      contracts['contracts/protocols/RailgunDeposit.sol'].RailgunDeposit.abi, signer) as unknown as DepositForwarder;
+    const adapter = createRailgunAdapter({ chainId: (await provider.getNetwork()).chainId,
+      factory: await factory.getAddress(), pool: await pool.getAddress() });
+    return { ...chain, contracts, fork, pool, token, factory, adapter, deployer, sender, relayer,
       recovery, attacker, treasury, feeCollector, forwarderAt };
   } catch (error) { await chain.close(); throw error; }
 }
@@ -194,22 +197,16 @@ export async function createRecipient(): Promise<Recipient> {
 }
 
 export async function prepareDeposit(
-  env: Environment, recipientAddress: string, terms: { minDeposit: bigint; maxGasFee?: bigint },
+  env: Environment, recipientAddress: string, terms: { amount: bigint; gasFee?: bigint },
 ): Promise<PreparedDeposit> {
-  // Preparation knows only the PUBLIC 0zk address. It cannot spend for the recipient.
-  const { masterPublicKey, viewingPublicKey } = decodeAddress(recipientAddress);
-  const random = randomBytes(16).toString('hex');
-  const note = new ShieldNoteERC20(masterPublicKey, random, 1n, await env.token.getAddress());
-  // Value 1 is only an SDK construction placeholder; the contract reads the live balance.
-  const request = await note.serialize(randomBytes(32), viewingPublicKey);
-  const salt = hexlify(randomBytes(32));
-  const args: DepositArguments = [salt, {
-    token: await env.token.getAddress(), notePublicKey: request.preimage.npk,
-    ciphertext: request.ciphertext, recovery: await env.recovery.getAddress(),
+  const address = await env.adapter.prepare(env.provider, {
+    recipient: recipientAddress, recovery: await env.recovery.getAddress(),
     relayer: await env.relayer.getAddress(), feeRecipient: await env.feeCollector.getAddress(),
-    minDeposit: terms.minDeposit, maxGasFee: terms.maxGasFee ?? 0n,
-  }];
-  return { args, address: await env.factory.computeAddress(...args) };
+  });
+  const block = await env.provider.getBlock('latest');
+  assert(block);
+  return env.adapter.quote(env.provider, address, { token: await env.token.getAddress(),
+    amount: terms.amount, gasFee: terms.gasFee ?? 0n, deadline: BigInt(block.timestamp + 3_600) });
 }
 
 export async function fund(env: Environment, address: string, amount: bigint) {
@@ -220,11 +217,9 @@ export async function fund(env: Environment, address: string, amount: bigint) {
   return receipt;
 }
 
-export async function settle(env: Environment, deposit: PreparedDeposit, gasFee = 0n) {
+export async function settle(env: Environment, deposit: PreparedDeposit, gasFee = deposit.quote.gasFee) {
   env.depositPath = await captureDepositPath(env);
-  const receipt = await (await env.factory.connect(env.relayer).deployAndShield(...deposit.args, gasFee)).wait();
-  assert(receipt, 'Shielding transaction must be mined');
-  return receipt;
+  return mined(relayDeposit(env.adapter, { ...deposit, quote: { ...deposit.quote, gasFee } }, env.relayer));
 }
 
 export async function captureDepositPath(env: Environment): Promise<DepositPath> {
@@ -242,7 +237,7 @@ export async function captureDepositPath(env: Environment): Promise<DepositPath>
 }
 
 export async function decryptDeposit(
-  env: Environment, recipient: Recipient, receipt: ContractTransactionReceipt,
+  env: Environment, recipient: Recipient, receipt: TransactionReceipt,
 ) {
   const poolAddress = (await env.pool.getAddress()).toLowerCase();
   const events = receipt.logs.filter((log) => log.address.toLowerCase() === poolAddress)

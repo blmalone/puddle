@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFile, writeFile, access } from 'node:fs/promises';
+import { readFile, writeFile, access, readdir } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { brand } from './brand.ts';
 
@@ -23,7 +23,7 @@ const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 changes.set('brand.json', json(next));
 
 // Package managers and GitHub need literal names, so update their files together.
-for (const prefix of ['', 'docs/']) {
+for (const [prefix, suffix] of [['', ''], ['docs/', '-docs'], ['test/privacy-pools/', '-privacy-pools-tests']]) {
   for (const file of ['package.json', 'package-lock.json']) {
     const path = `${prefix}${file}`;
     let source: string;
@@ -33,17 +33,27 @@ for (const prefix of ['', 'docs/']) {
       throw error;
     }
     const pkg = JSON.parse(source);
-    pkg.name = `${name}${prefix ? '-docs' : ''}`;
+    pkg.name = `${name}${suffix}`;
     if (file === 'package-lock.json') pkg.packages[''].name = pkg.name;
     else if (!prefix) pkg.repository = { type: 'git', url: `${repository}.git` };
     changes.set(path, json(pkg));
   }
 }
 
-let readme = await readFile(new URL('README.md', root), 'utf8');
 const escaped = brand.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-readme = readme.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), word =>
+const renameText = (text: string) => text.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), word =>
   word[0] === word[0].toUpperCase() ? name.charAt(0).toUpperCase() + name.slice(1) : name);
+// Rename prose too; implementation paths and storage keys remain product-independent.
+for (const directory of ['', 'docs/src/pages/', 'recovery/']) {
+  for (const file of await readdir(new URL(directory, root))) {
+    if (!file.endsWith('.md') || file === 'README.md' && !directory) continue;
+    const path = `${directory}${file}`;
+    const before = await readFile(new URL(path, root), 'utf8');
+    const after = renameText(before);
+    if (after !== before) changes.set(path, after);
+  }
+}
+let readme = renameText(await readFile(new URL('README.md', root), 'utf8'));
 const heading = `<!-- brand:start -->\n# ${name}${next.definition ? `\n\n${next.definition}` : ''}\n<!-- brand:end -->`;
 const block = /<!-- brand:start -->[\s\S]*?<!-- brand:end -->/;
 if (!block.test(readme) && !/^# [^\n]+/.test(readme)) throw new Error('README must start with a title.');

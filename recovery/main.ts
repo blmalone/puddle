@@ -1,6 +1,6 @@
 import { BrowserProvider, ZeroAddress, formatUnits, getAddress, isError } from 'ethers';
 import type { Eip1193Provider } from 'ethers';
-import { checkRecoveryAddress, inspectRecovery, maxRecoveryFileBytes, parseRecoveryFile,
+import { recoveryAsset, checkRecoveryAddress, inspectRecovery, maxRecoveryFileBytes, parseRecoveryFile,
   recoveryTransaction } from './core.ts';
 import type { RecoveryArtifacts, RecoveryFile, RecoveryStatus } from './core.ts';
 
@@ -51,9 +51,9 @@ function load(text: string) {
   for (const [id, value] of [
     ['chain', file.chainId], ['deposit', file.depositAddress], ['owner', file.config.recovery], ['factory', file.factory],
   ]) element(id).textContent = value;
-  element<HTMLInputElement>('asset-address').value = file.config.token;
-  element<HTMLSelectElement>('asset-kind').value = 'token';
-  element('token-field').hidden = false;
+  element<HTMLInputElement>('asset-address').value = recoveryAsset(file);
+  element<HTMLSelectElement>('asset-kind').value = file.asset === ZeroAddress ? 'native' : 'token';
+  element('token-field').hidden = file.asset === ZeroAddress;
   element('review').hidden = false;
   message('File loaded. Connect the recovery wallet to check the contract and balance.');
 }
@@ -111,7 +111,7 @@ async function check() {
   submit.hidden = status.balance === 0n;
   submit.textContent = status.deployed ? 'Recover to your wallet' : 'Deploy recovery contract';
   message(status.balance === 0n
-    ? 'No balance for this asset. Funds already shielded stay in your RAILGUN wallet.'
+    ? 'No balance for this asset. Funds already shielded stay in your protocol wallet.'
     : status.deployed ? 'Ready. Recovery returns this balance to the wallet shown above.'
       : 'Two wallet transactions: deploy the contract, then recover your funds.');
 }

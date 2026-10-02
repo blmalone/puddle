@@ -35,13 +35,11 @@ jobs:
           cache: false
       - run: npm ci --ignore-scripts
       - run: npm ci --prefix docs --ignore-scripts
-      - run: npm run typecheck
-      - run: npm run docs:typecheck
-      - run: npm run docs:build
-      - run: npm run setup
-      - run: npm test
-      - run: npm run test:ui
-      - run: npm run test:recovery
+      - run: npm run setup:contracts
+      - name: TypeScript, Solidity, integration tests and site builds
+        run: npm run check
+        env:
+          FOUNDRY_PROFILE: ci
       - name: Arbitrum fork test
         if: github.event_name == 'workflow_dispatch' && inputs.fork
         run: npm run test:fork

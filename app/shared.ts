@@ -1,6 +1,5 @@
 export const decimals = 6;
 export const gasFee = 200_000n;
-export const maxGasFee = 500_000n;
 
 export interface Quote {
   amount: string;
@@ -14,6 +13,7 @@ export type Phase = 'ready' | 'funding' | 'funded' | 'shielding' | 'verifying'
   | 'complete' | 'recovering' | 'recovered' | 'error';
 
 export interface DepositView {
+  protocol: 'railgun';
   address: string;
   quote: Quote;
   phase: Phase;

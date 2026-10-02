@@ -6,10 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { brand } from './brand.ts';
 import { createEnvironment, createRecipient, prepareDeposit, fund, settle, decryptDeposit } from './harness.ts';
 import type { PreparedDeposit } from './types.ts';
-import type { ContractTransactionReceipt } from 'ethers';
-import { gasFee, maxGasFee, quoteAmount } from '../app/shared.ts';
+import type { TransactionReceipt } from 'ethers';
+import { gasFee, quoteAmount } from '../app/shared.ts';
 import type { AppState } from '../app/shared.ts';
 import { createRecoveryFile } from './recovery-file.ts';
+import { mined, recoveryTransaction } from '../protocols/deposit.ts';
 
 class RequestError extends Error {
   readonly status: number;
@@ -44,7 +45,7 @@ export async function startLocalApp(port = 5173) {
       factory: await env.factory.getAddress(), privateBalance: '0', deposit: null,
     };
     let prepared: PreparedDeposit | undefined;
-    let shieldReceipt: ContractTransactionReceipt | undefined;
+    let shieldReceipt: TransactionReceipt | undefined;
     let busy = false;
     let task: Promise<void> | undefined;
 
@@ -91,6 +92,7 @@ export async function startLocalApp(port = 5173) {
       ['/assets/rainbow.svg', ['app/assets/rainbow.svg', 'image/svg+xml']],
       ['/assets/rabby.svg', ['app/assets/rabby.svg', 'image/svg+xml']],
       ['/assets/railgun.svg', ['app/assets/railgun.svg', 'image/svg+xml']],
+      ['/assets/privacy-pools.svg', ['app/assets/privacy-pools.svg', 'image/svg+xml']],
       ['/assets/chains/eth.png', ['app/assets/chains/eth.png', 'image/png']],
       ['/assets/chains/base.png', ['app/assets/chains/base.png', 'image/png']],
       ['/assets/chains/arbitrum.png', ['app/assets/chains/arbitrum.png', 'image/png']],
@@ -132,7 +134,7 @@ export async function startLocalApp(port = 5173) {
         if (path === '/api/recovery') {
           const requested = new URL(request.url!, `http://${host}`).searchParams.get('address');
           if (!prepared || requested !== prepared.address) throw new RequestError('This deposit is no longer active.', 409);
-          const file = createRecoveryFile((await env.provider.getNetwork()).chainId, state.factory, state.pool, prepared);
+          const file = createRecoveryFile(prepared, prepared.quote.token);
           response.writeHead(200, { 'Content-Type': 'application/json',
             'Content-Disposition': `attachment; filename="${brand.name}-recovery-${prepared.address}.json"` });
           response.end(`${JSON.stringify(file, null, 2)}\n`);
@@ -153,6 +155,9 @@ export async function startLocalApp(port = 5173) {
       const body = await readBody(request);
       if (busy) throw new RequestError('A deposit action is already running.', 409);
       if (path === '/api/deposits') {
+        if (body.protocol !== undefined && body.protocol !== 'railgun') {
+          throw new RequestError('This local demo supports RAILGUN only.');
+        }
         if (state.deposit && !['complete', 'recovered'].includes(state.deposit.phase)) {
           throw new RequestError('Finish the current deposit first.', 409);
         }
@@ -163,9 +168,9 @@ export async function startLocalApp(port = 5173) {
         busy = true;
         try {
           prepared = await prepareDeposit(env, recipient.address,
-            { minDeposit: BigInt(quote.amount), maxGasFee });
+            { amount: BigInt(quote.amount), gasFee });
           shieldReceipt = undefined;
-          state.deposit = { address: prepared.address, quote, phase: 'ready' };
+          state.deposit = { protocol: prepared.protocol, address: prepared.address, quote, phase: 'ready' };
         } finally { busy = false; }
         return sendState(201);
       }
@@ -194,8 +199,13 @@ export async function startLocalApp(port = 5173) {
         deposit.phase = 'recovering';
         runTask(async () => {
           assert(prepared);
-          await (await env.factory.connect(env.recovery).deploy(...prepared.args)).wait();
-          const receipt = await (await env.forwarderAt(deposit.address, env.recovery).recover(state.token)).wait();
+          const owner = await env.recovery.getAddress();
+          // A fresh address needs deployment first; an existing one can recover immediately.
+          const deployed = await env.provider.getCode(prepared.address) !== '0x';
+          let receipt = await mined(env.recovery.sendTransaction(await recoveryTransaction(
+            env.adapter, prepared, env.provider, owner, prepared.quote.token)));
+          if (!deployed) receipt = await mined(env.recovery.sendTransaction(await recoveryTransaction(
+            env.adapter, prepared, env.provider, owner, prepared.quote.token)));
           assert(receipt);
           assert.equal(await env.token.balanceOf(deposit.address), 0n);
           deposit.recoveryTx = receipt.hash;

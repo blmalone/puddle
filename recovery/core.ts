@@ -2,10 +2,9 @@ import { AbiCoder, Contract, Interface, ZeroAddress, concat, getAddress, getCrea
   keccak256, zeroPadValue } from 'ethers';
 import type { Provider, TransactionRequest } from 'ethers';
 
-export const recoveryFormat = 'railgun-deposit-recovery';
+export const recoveryFormat = 'private-deposit-recovery';
 export const maxRecoveryFileBytes = 16_384;
-const configTuple = 'tuple(address token,bytes32 notePublicKey,tuple(bytes32[3] encryptedBundle,bytes32 shieldKey) ciphertext,address recovery,address relayer,address feeRecipient,uint256 minDeposit,uint256 maxGasFee)';
-const factoryABI = new Interface([`function deploy(bytes32 salt,${configTuple} config) returns (address)`]);
+const configTuple = 'tuple(bytes recipient,address recovery,address relayer,address feeRecipient)';
 const forwarderABI = new Interface([
   'function recover(address asset)', 'function recoverNative()', 'function recovery() view returns (address)',
 ]);
@@ -14,29 +13,24 @@ const forwarderABI = new Interface([
 export interface RecoveryFile {
   format: typeof recoveryFormat;
   version: 1;
+  protocol: 'railgun' | 'privacy-pools';
   chainId: string;
   factory: string;
   pool: string;
   depositAddress: string;
   salt: string;
-  config: {
-    token: string;
-    notePublicKey: string;
-    ciphertext: { encryptedBundle: [string, string, string]; shieldKey: string };
-    recovery: string;
-    relayer: string;
-    feeRecipient: string;
-    minDeposit: string;
-    maxGasFee: string;
-  };
+  asset: string; // Initial selection only; never part of CREATE2 derivation.
+  config: { recipient: string; recovery: string; relayer: string; feeRecipient: string };
 }
 
 // Supplied by this tool's build, NEVER by an imported recovery file.
-export interface RecoveryArtifacts {
+export interface RecoveryBuild {
   forwarderCreationCode: string;
   factoryRuntimeCode: string;
   poolReferences: { start: number; length: number }[];
 }
+export type RecoveryArtifacts = Record<RecoveryFile['protocol'], RecoveryBuild>;
+export const recoveryAsset = (file: RecoveryFile) => file.asset;
 
 function object(value: unknown, keys: string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)
@@ -45,10 +39,10 @@ function object(value: unknown, keys: string[]): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function address(value: unknown): string {
+function address(value: unknown, allowZero = false): string {
   if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error('Invalid address in recovery file.');
   const result = getAddress(value);
-  if (result === ZeroAddress) throw new Error('Recovery file contains a zero address.');
+  if (!allowZero && result === ZeroAddress) throw new Error('Recovery file contains a zero address.');
   return result;
 }
 
@@ -67,35 +61,32 @@ export function parseRecoveryFile(text: string): RecoveryFile {
   if (new TextEncoder().encode(text).length > maxRecoveryFileBytes) throw new Error('Recovery file is too large.');
   let input: unknown;
   try { input = JSON.parse(text); } catch { throw new Error('Choose a valid JSON recovery file.'); }
-  const file = object(input, ['format', 'version', 'chainId', 'factory', 'pool', 'depositAddress', 'salt', 'config']);
-  if (file.format !== recoveryFormat || file.version !== 1) throw new Error('Unsupported recovery file version.');
-  const config = object(file.config, ['token', 'notePublicKey', 'ciphertext', 'recovery', 'relayer', 'feeRecipient', 'minDeposit', 'maxGasFee']);
-  const ciphertext = object(config.ciphertext, ['encryptedBundle', 'shieldKey']);
-  const bundle = ciphertext.encryptedBundle;
-  if (!Array.isArray(bundle) || bundle.length !== 3) throw new Error('Invalid encrypted deposit data.');
-  const result: RecoveryFile = {
-    format: recoveryFormat, version: 1, chainId: uint(file.chainId), factory: address(file.factory),
-    pool: address(file.pool), depositAddress: address(file.depositAddress), salt: bytes32(file.salt),
-    config: {
-      token: address(config.token), notePublicKey: bytes32(config.notePublicKey),
-      ciphertext: { encryptedBundle: [bytes32(bundle[0]), bytes32(bundle[1]), bytes32(bundle[2])],
-        shieldKey: bytes32(ciphertext.shieldKey) },
-      recovery: address(config.recovery), relayer: address(config.relayer), feeRecipient: address(config.feeRecipient),
-      minDeposit: uint(config.minDeposit, 120), maxGasFee: uint(config.maxGasFee),
-    },
-  };
-  const minimum = BigInt(result.config.minDeposit);
-  if (result.chainId === '0' || minimum === 0n
-    || BigInt(result.config.maxGasFee) >= minimum - minimum / 1_000n
-    || result.config.recovery === result.depositAddress || result.config.feeRecipient === result.depositAddress) {
-    throw new Error('Invalid deposit configuration.');
+  const file = object(input, ['format', 'version', 'protocol', 'chainId', 'factory', 'pool',
+    'depositAddress', 'salt', 'asset', 'config']);
+  if (file.format !== recoveryFormat || file.version !== 1
+    || (file.protocol !== 'railgun' && file.protocol !== 'privacy-pools')) throw new Error('Unsupported recovery format.');
+  const config = object(file.config, ['recipient', 'recovery', 'relayer', 'feeRecipient']);
+  const recipientBytes = file.protocol === 'railgun' ? 160 : 32;
+  if (typeof config.recipient !== 'string'
+    || !new RegExp(`^0x[0-9a-fA-F]{${recipientBytes * 2}}$`).test(config.recipient)) {
+    throw new Error('Invalid recipient instructions.');
   }
+  if (file.protocol === 'privacy-pools' && BigInt(config.recipient) === 0n) throw new Error('Invalid deposit commitment.');
+  const result: RecoveryFile = {
+    format: recoveryFormat, version: 1, protocol: file.protocol, chainId: uint(file.chainId),
+    factory: address(file.factory), pool: address(file.pool), depositAddress: address(file.depositAddress),
+    salt: bytes32(file.salt), asset: address(file.asset, true),
+    config: { recipient: config.recipient.toLowerCase(), recovery: address(config.recovery),
+      relayer: address(config.relayer), feeRecipient: address(config.feeRecipient) },
+  };
+  if (result.chainId === '0' || result.config.recovery === result.depositAddress
+    || result.config.feeRecipient === result.depositAddress) throw new Error('Invalid deposit configuration.');
   return result;
 }
 
 export function predictRecoveryAddress(file: RecoveryFile, artifacts: RecoveryArtifacts): string {
   const constructor = AbiCoder.defaultAbiCoder().encode(['address', configTuple], [file.pool, file.config]);
-  return getCreate2Address(file.factory, file.salt, keccak256(concat([artifacts.forwarderCreationCode, constructor])));
+  return getCreate2Address(file.factory, file.salt, keccak256(concat([artifacts[file.protocol].forwarderCreationCode, constructor])));
 }
 
 export function checkRecoveryAddress(file: RecoveryFile, artifacts: RecoveryArtifacts) {
@@ -104,7 +95,7 @@ export function checkRecoveryAddress(file: RecoveryFile, artifacts: RecoveryArti
   }
 }
 
-function factoryCode(file: RecoveryFile, artifacts: RecoveryArtifacts): string {
+function factoryCode(file: RecoveryFile, artifacts: RecoveryBuild): string {
   let code = artifacts.factoryRuntimeCode.slice(2);
   const pool = zeroPadValue(file.pool, 32).slice(2).toLowerCase();
   for (const { start, length } of artifacts.poolReferences) {
@@ -122,7 +113,7 @@ export interface RecoveryStatus {
 }
 
 export async function inspectRecovery(
-  provider: Provider, file: RecoveryFile, artifacts: RecoveryArtifacts, asset = file.config.token,
+  provider: Provider, file: RecoveryFile, artifacts: RecoveryArtifacts, asset = recoveryAsset(file),
 ): Promise<RecoveryStatus> {
   checkRecoveryAddress(file, artifacts);
   if ((await provider.getNetwork()).chainId !== BigInt(file.chainId)) {
@@ -131,7 +122,7 @@ export async function inspectRecovery(
   const [factory, deposit] = await Promise.all([
     provider.getCode(file.factory), provider.getCode(file.depositAddress),
   ]);
-  if (factory.toLowerCase() !== factoryCode(file, artifacts).toLowerCase()) {
+  if (factory.toLowerCase() !== factoryCode(file, artifacts[file.protocol]).toLowerCase()) {
     throw new Error('The factory is missing or does not match this tool’s contract build.');
   }
   // Matching factory code + locally calculated CREATE2 address binds the forwarder code
@@ -173,6 +164,7 @@ export async function recoveryTransaction(
   if (status.balance === 0n) throw new Error('There are no funds of this asset to recover.');
   if (action === 'deploy' && status.deployed) throw new Error('Already deployed. Check the balance again.');
   if (action === 'recover' && !status.deployed) throw new Error('Deploy the recovery contract first.');
+  const factoryABI = new Interface([`function deploy(bytes32 salt,${configTuple} config) returns (address)`]);
   const data = action === 'deploy'
     ? factoryABI.encodeFunctionData('deploy', [file.salt, file.config])
     : asset === ZeroAddress ? forwarderABI.encodeFunctionData('recoverNative')

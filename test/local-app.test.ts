@@ -53,6 +53,7 @@ test('serves the local interface without exposing test secrets or allowing cross
 });
 
 test('rejects malformed amounts and does not create or fund a deposit on invalid requests', async () => {
+  assert.equal((await post('/api/deposits', { protocol: 'privacy-pools', amount: '100' })).status, 400);
   for (const amount of ['0', '-1', '1e6', '1.1234567', '1000001', 'NaN', '<script>', 100]) {
     assert.equal((await post('/api/deposits', { amount })).status, 400);
   }
@@ -62,10 +63,11 @@ test('rejects malformed amounts and does not create or fund a deposit on invalid
 });
 
 test('creates, funds, relays and decrypts real local deposits; duplicate and stale actions cannot send twice', async () => {
-  const created = await post('/api/deposits', { amount: '100' });
+  const created = await post('/api/deposits', { protocol: 'railgun', amount: '100' });
   assert.equal(created.status, 201);
   const first = await created.json() as AppState;
   assert(first.deposit);
+  assert.equal(first.deposit.protocol, 'railgun');
   assert.equal(first.deposit.phase, 'ready');
   assert.deepEqual(first.deposit.quote, quoteAmount('100'));
   assert.equal((await post('/api/deposits', { amount: '25' })).status, 409);

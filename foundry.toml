@@ -1,0 +1,39 @@
+[profile.default]
+src = "contracts"
+test = "test/solidity"
+out = ".cache/foundry/out"
+cache_path = ".cache/foundry/cache"
+test_failures_file = ".cache/foundry/test-failures"
+libs = ["node_modules", ".cache/forge-std"]
+auto_detect_remappings = false
+remappings = [
+  "forge-std/=.cache/forge-std/src/",
+  "fixtures/=test/contracts/",
+  "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
+  "railgun/=.cache/railgun-contract/",
+]
+solc = "0.8.17"
+evm_version = "london"
+optimizer = true
+optimizer_runs = 200
+
+[profile.default.fuzz]
+runs = 256
+failure_persist_dir = ".cache/foundry/fuzz"
+
+[profile.default.invariant]
+runs = 128
+depth = 64
+fail_on_revert = true
+show_metrics = true
+failure_persist_dir = ".cache/foundry/invariant"
+
+[profile.ci.fuzz]
+runs = 2048
+
+[profile.ci.invariant]
+runs = 256
+depth = 128
+
+[fmt]
+line_length = 120

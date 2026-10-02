@@ -11,19 +11,19 @@ try {
   const amount = 100_000_000n;
   const gasFee = 200_000n; // Illustrative token charge, not a live gas quote.
   const serviceFee = amount / 1_000n;
-  const deposit = await prepareDeposit(env, recipient.address, { minDeposit: amount, maxGasFee: 500_000n });
+  const deposit = await prepareDeposit(env, recipient.address, { amount: amount });
   console.log(`Recipient (test identity): ${recipient.address}`);
   console.log(`CREATE2 deposit address: ${deposit.address}`);
   assert.equal(await env.provider.getCode(deposit.address), '0x');
   const funded = await fund(env, deposit.address, amount);
   assert.equal(await env.provider.getCode(deposit.address), '0x');
-  console.log('Sent 100 dUSD with an ordinary token transfer. Address still has no deployed code.');
+  console.log('Sent 100 test USDC with an ordinary token transfer. Address still has no deployed code.');
   const receipt = await settle(env, deposit, gasFee);
   const result = await decryptDeposit(env, recipient, receipt);
   assert.equal(result.amount + result.fee + serviceFee + gasFee, amount);
   console.log(`Relayer deployed the forwarder, collected fees, and shielded the remainder (${receipt.gasUsed} gas).`);
-  console.log(`${brand.displayName}: ${formatUnits(serviceFee, 6)} dUSD service fee + ${formatUnits(gasFee, 6)} dUSD illustrative gas charge.`);
-  console.log(`Recipient decrypted ${formatUnits(result.amount, 6)} dUSD; pool fee ${formatUnits(result.fee, 6)} dUSD.`);
+  console.log(`${brand.displayName}: ${formatUnits(serviceFee, 6)} test USDC service fee + ${formatUnits(gasFee, 6)} test USDC illustrative gas charge.`);
+  console.log(`Recipient decrypted ${formatUnits(result.amount, 6)} test USDC; pool fee ${formatUnits(result.fee, 6)} test USDC.`);
   console.log('Reconstructed the note commitment and verified its inclusion in the real pool Merkle root.');
   console.log('This verifies deposit + decryption, not a private withdrawal or production proof-of-innocence acceptance.');
   saveReport({ mode: 'isolated local chain', chainId: 31337, recipient: recipient.address,

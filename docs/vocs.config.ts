@@ -3,7 +3,7 @@ import { brand } from '../scripts/brand.ts';
 
 export default defineConfig({
   title: brand.name,
-  description: 'Send to your RAILGUN private balance from any crypto wallet.',
+  description: 'Fund private balances with an ordinary token transfer.',
   iconUrl: '/icon.svg',
   colorScheme: 'light dark',
   accentColor: 'light-dark(#5b56e2, #9c98ff)',
@@ -11,6 +11,7 @@ export default defineConfig({
   sidebar: [
     { text: 'How it works', link: '/' },
     { text: 'Fees', link: '/fees' },
+    { text: 'Privacy Pools', link: '/privacy-pools' },
     { text: 'Recovery', link: '/recovery' },
     { text: 'Contracts & security', link: '/contracts' },
   ],

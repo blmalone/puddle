@@ -20,9 +20,10 @@ the balance. The file is not uploaded. You can also run the tool yourself with
 3. The balance returns to the fixed recovery wallet.
 
 The tool checks the deposit address and factory code against its own contract
-build. Older contract versions require their matching recovery build. The demo
+build. The current format supports both RAILGUN and Privacy Pools; old pre-release
+formats and unknown versions are rejected. The demo
 uses a local chain and test recovery wallet; the public recovery site is not deployed yet.
 
 Recovery also works for partial deposits, wrong tokens and transfers received after shielding. Use `recoverNative()` for native currency accidentally sent before deployment or forcibly received.
 
-You pay transaction gas; there is no service fee. Recovery is public, and reusing a recovery address links deposits. Successfully shielded funds are controlled through the RAILGUN wallet.
+You pay transaction gas; there is no service fee. Recovery is public, and reusing a recovery address links deposits. Successfully deposited funds are controlled through the recipient's protocol wallet.

@@ -1,9 +1,12 @@
 import type { ViewingKeyPair } from '@railgun-community/engine';
-import type { BaseContract, BaseContractMethod, BytesLike, ContractRunner,
+import type { BaseContract, BaseContractMethod, ContractRunner,
   ContractTransactionResponse, JsonFragment, JsonRpcProvider, JsonRpcSigner } from 'ethers';
 // These type-only paths match the pinned engine's internal ABI definitions.
-import type { RailgunSmartWallet, ShieldCiphertextStruct } from
+import type { RailgunSmartWallet } from
   '../node_modules/@railgun-community/engine/dist/abi/typechain/RailgunSmartWallet.js';
+import type { DepositConfig, DepositQuote } from '../protocols/deposit.ts';
+import type { RailgunDeposit, createRailgunAdapter } from '../protocols/railgun.ts';
+export type { DepositConfig } from '../protocols/deposit.ts';
 
 type Read<Args extends unknown[], Result> = BaseContractMethod<Args, Result, Result>;
 type Write<Args extends unknown[], Result = void> =
@@ -19,33 +22,21 @@ export interface TokenContract extends BaseContract {
   transfer: Write<[recipient: string, amount: bigint], boolean>;
 }
 
-export interface DepositConfig {
-  token: string;
-  notePublicKey: BytesLike;
-  ciphertext: ShieldCiphertextStruct;
-  recovery: string;
-  relayer: string;
-  feeRecipient: string;
-  minDeposit: bigint;
-  maxGasFee: bigint;
-}
-
 export type DepositArguments = [salt: string, config: DepositConfig];
 
 export interface DepositFactory extends BaseContract {
   connect(runner: ContractRunner | null): DepositFactory;
   computeAddress: Read<DepositArguments, string>;
+  maxGasFee: Read<[token: string, amount: bigint], bigint>;
   deploy: Write<DepositArguments, string>;
-  deployAndShield: Write<[...DepositArguments, gasFee: bigint], string>;
+  deployAndExecute: Write<[...DepositArguments, quote: DepositQuote, data: string], string>;
 }
 
 export interface DepositForwarder extends BaseContract {
   connect(runner: ContractRunner | null): DepositForwarder;
-  shield: Write<[gasFee: bigint]>;
-  preview: Read<[amount: bigint, gasFee: bigint], [serviceFee: bigint, shieldAmount: bigint]>;
+  execute: Write<[quote: DepositQuote, data: string]>;
+  preview: Read<[quote: DepositQuote], [serviceFee: bigint, shieldAmount: bigint]>;
   spent: Read<[], boolean>;
-  maxGasFee: Read<[], bigint>;
-  minDeposit: Read<[], bigint>;
   relayer: Read<[], string>;
   feeRecipient: Read<[], string>;
   recover: Write<[token: string]>;
@@ -95,6 +86,7 @@ export interface Environment {
   pool: RailgunSmartWallet;
   token: TokenContract;
   factory: DepositFactory;
+  adapter: ReturnType<typeof createRailgunAdapter>;
   deployer: JsonRpcSigner;
   sender: JsonRpcSigner;
   relayer: JsonRpcSigner;
@@ -112,7 +104,4 @@ export interface Recipient {
   viewing: ViewingKeyPair;
 }
 
-export interface PreparedDeposit {
-  address: string;
-  args: DepositArguments;
-}
+export type PreparedDeposit = RailgunDeposit;

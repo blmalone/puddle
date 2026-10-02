@@ -12,5 +12,10 @@
     "vite": "8.3.1",
     "vocs": "2.10.0",
     "waku": "1.0.0-rc.1"
+  },
+  "overrides": {
+    "remark-mdx-frontmatter": {
+      "toml": "4.2.0"
+    }
   }
 }

@@ -1,32 +1,30 @@
 import assert from 'node:assert/strict';
-import { hexlify } from 'ethers';
+import { ZeroAddress } from 'ethers';
 import { parseRecoveryFile, recoveryFormat } from '../recovery/core.ts';
-import type { RecoveryArtifacts } from '../recovery/core.ts';
-import type { CompiledContracts, PreparedDeposit } from './types.ts';
+import type { RecoveryArtifacts, RecoveryBuild } from '../recovery/core.ts';
+import type { DepositRecord } from '../protocols/deposit.ts';
+import type { CompiledContracts } from './types.ts';
 
-export function createRecoveryFile(chainId: bigint, factory: string, pool: string, deposit: PreparedDeposit) {
-  const [salt, config] = deposit.args;
+export function createRecoveryFile(deposit: DepositRecord, asset = ZeroAddress) {
+  const { protocol, chainId, factory, pool, salt, config } = deposit;
   return parseRecoveryFile(JSON.stringify({
-    format: recoveryFormat, version: 1, chainId: String(chainId), factory, pool,
-    depositAddress: deposit.address, salt,
-    config: { ...config, notePublicKey: hexlify(config.notePublicKey),
-      ciphertext: { encryptedBundle: config.ciphertext.encryptedBundle.map(value => hexlify(value)),
-        shieldKey: hexlify(config.ciphertext.shieldKey) },
-      minDeposit: String(config.minDeposit), maxGasFee: String(config.maxGasFee) },
+    format: recoveryFormat, version: 1, protocol, asset, chainId: String(chainId), factory, pool,
+    depositAddress: deposit.address, salt, config,
   }));
 }
 
 export function recoveryArtifacts(contracts: CompiledContracts): RecoveryArtifacts {
-  const { DepositFactory: factory, DepositForwarder: forwarder } = contracts['contracts/DepositFactory.sol'];
-  assert.deepEqual(factory.evm.bytecode.linkReferences, {});
-  assert.deepEqual(forwarder.evm.bytecode.linkReferences, {});
-  const references = Object.values(factory.evm.deployedBytecode.immutableReferences);
-  // The factory has exactly one immutable: its pool address. Fail closed if this changes.
-  assert.equal(references.length, 1, 'Review recovery validation after changing factory immutables');
-  assert(references[0].length > 0 && references[0].every(reference => reference.length === 32));
-  return {
-    forwarderCreationCode: `0x${forwarder.evm.bytecode.object}`,
-    factoryRuntimeCode: `0x${factory.evm.deployedBytecode.object}`,
-    poolReferences: references[0],
-  };
+  function build(protocol: 'Railgun' | 'PrivacyPools'): RecoveryBuild {
+    const source = contracts[`contracts/protocols/${protocol}Deposit.sol`];
+    const factory = source[`${protocol}DepositFactory`];
+    const forwarder = source[`${protocol}Deposit`];
+    assert.deepEqual(factory.evm.bytecode.linkReferences, {});
+    assert.deepEqual(forwarder.evm.bytecode.linkReferences, {});
+    const references = Object.values(factory.evm.deployedBytecode.immutableReferences);
+    assert.equal(references.length, 1, 'Review recovery validation after changing factory immutables');
+    assert(references[0].length > 0 && references[0].every(reference => reference.length === 32));
+    return { forwarderCreationCode: `0x${forwarder.evm.bytecode.object}`,
+      factoryRuntimeCode: `0x${factory.evm.deployedBytecode.object}`, poolReferences: references[0] };
+  }
+  return { railgun: build('Railgun'), 'privacy-pools': build('PrivacyPools') };
 }

@@ -3,11 +3,7 @@
   const key = 'private-deposit-theme';
   let dark = false;
   try {
-    // Preserve the original demo preference; future renames use the same key.
-    const preference = localStorage.getItem(key) ?? localStorage.getItem('jumpr-theme');
-    dark = preference === 'dark';
-    if (preference) localStorage.setItem(key, preference);
-    localStorage.removeItem('jumpr-theme');
+    dark = localStorage.getItem(key) === 'dark';
   } catch { /* Storage may be disabled. */ }
 
   function apply() {

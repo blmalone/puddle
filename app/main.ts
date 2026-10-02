@@ -31,6 +31,53 @@ menu.addEventListener('click', event => {
   }
 });
 
+// Same blur/slide rhythm as clkd's hero, with a stable width for both logos.
+function startProtocolRotation() {
+  const protocols = element('protocols');
+  const links = Array.from(protocols.querySelectorAll<HTMLAnchorElement>('a'));
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  let current = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  function show(index: number) {
+    links[current]!.dataset.state = 'outgoing';
+    current = index;
+    links[current]!.dataset.state = 'active';
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    if (reducedMotion.matches || document.hidden
+        || protocols.matches(':hover, :focus-within')) return;
+    timer = setTimeout(() => {
+      show((current + 1) % links.length);
+      schedule();
+    }, 2_800);
+  }
+
+  function configure() {
+    protocols.toggleAttribute('data-rotating', !reducedMotion.matches);
+    for (const [index, link] of links.entries()) {
+      link.dataset.state = index === current ? 'active' : 'idle';
+    }
+    schedule();
+  }
+
+  protocols.addEventListener('pointerenter', () => clearTimeout(timer));
+  protocols.addEventListener('pointerleave', schedule);
+  protocols.addEventListener('focusin', event => {
+    clearTimeout(timer);
+    // Both links remain keyboard-accessible; focus reveals its destination.
+    const index = links.findIndex(link => link === event.target);
+    if (index >= 0) show(index);
+  });
+  protocols.addEventListener('focusout', () => queueMicrotask(schedule));
+  document.addEventListener('visibilitychange', schedule);
+  reducedMotion.addEventListener('change', configure);
+  configure();
+}
+startProtocolRotation();
+
 let state: AppState | undefined;
 let editing = true;
 let submitting = false;

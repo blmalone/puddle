@@ -10,7 +10,19 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["app/**/*.ts", "recovery/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "types/**/*.d.ts"]
+  "include": [
+    "app/**/*.ts",
+    "protocols/**/*.ts",
+    "recovery/**/*.ts",
+    "scripts/**/*.ts",
+    "test/**/*.ts",
+    "types/**/*.d.ts"
+  ],
+  "exclude": [
+    "test/privacy-pools"
+  ]
 }

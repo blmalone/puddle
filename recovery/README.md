@@ -1,6 +1,6 @@
 # Recovery
 
-Standalone recovery for unshielded funds. Uses a saved recovery file and the
+Standalone recovery for unshielded RAILGUN and Privacy Pools deposits. Uses a saved recovery file and the
 owner's wallet; no deposit API, relayer, private keys or token approvals.
 Files stay on your device. The wallet needs a blockchain connection and gas.
 
@@ -21,11 +21,19 @@ factory's onchain code with its own build. It checks the network and recovery
 owner before each transaction. Imported transaction data is never trusted.
 
 Keep the file private and compare its addresses with your records. Validation
-checks consistency, not the file's origin. Only this contract version is supported;
-retain matching recovery builds for older deposits. The tool is unaudited.
+checks consistency, not the file's origin. Only the current `private-deposit-recovery`
+format is supported; old pre-release files and unknown versions are rejected.
+The tool is unaudited.
+
+The file stores the protocol, chain, factory, pool, deposit address, salt, recipient
+instructions and fixed recovery/relayer/fee addresses. Recipient instructions are
+an encrypted RAILGUN note or a Privacy Pools call hash; recovery needs no proof or
+Privacy Pools SDK. The `asset` field only selects the
+initial token to check; it does not affect the deposit address. Amount, fee and expiry
+are execution settings and are unnecessary for recovery.
 
 The demo uses a temporary local chain and test wallet. Already shielded funds
-remain in the RAILGUN wallet; a pending recovery can be overtaken by shielding.
+remain in the recipient's protocol wallet; a pending recovery can be overtaken by depositing.
 Partial deposits, wrong assets and late transfers remain recoverable publicly.
 
 ## Hosting

@@ -2,6 +2,8 @@
 # puddle
 <!-- brand:end -->
 
+Motivation: [article](https://substack.com/home/post/p-218397149) - Published Oct 2nd 2026
+
 Fund a RAILGUN or Privacy Pools private balance with a normal token transfer.
 Send to a `0x` deposit address; a relayer handles the pool deposit.
 
